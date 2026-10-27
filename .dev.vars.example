@@ -1,0 +1,2 @@
+LOCAL_DEMO=true
+ALLOWED_EMAIL_DOMAIN=forest.ind.br

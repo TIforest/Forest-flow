@@ -1,0 +1,8 @@
+ALTER TABLE tasks ADD COLUMN checklist TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE task_imports (
+ id TEXT PRIMARY KEY,
+ actor_id TEXT NOT NULL REFERENCES users(id),
+ payload_hash TEXT NOT NULL,
+ task_count INTEGER NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

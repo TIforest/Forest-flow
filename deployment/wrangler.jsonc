@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "forest-flow",
+  "main": "../worker/index.ts",
+  "compatibility_date": "2026-10-26",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_EMAIL_DOMAIN": "forest.ind.br",
+  },
+  "assets": {
+    "directory": "../dist/client",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forest-flow",
+      "database_id": "94c43ec6-7cfb-47d8-8ccb-9721ea2d55c5",
+      "migrations_dir": "../migrations",
+    },
+  ],
+}

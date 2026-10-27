@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Forest Flow: iniciar",
+      "type": "shell",
+      "command": "npm.cmd run dev",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Forest Flow: verificar build",
+      "type": "shell",
+      "command": "npm.cmd run build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Forest Flow: preparar D1 local",
+      "type": "shell",
+      "command": "npm.cmd run db:migrate; npm.cmd run db:seed",
+      "problemMatcher": []
+    }
+  ]
+}
