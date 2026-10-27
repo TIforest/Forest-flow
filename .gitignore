@@ -16,3 +16,7 @@ dist/
 .vscode/settings.json
 importacao-*.png
 limpar-local.sql
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/config.local.json
+.impeccable/questions/

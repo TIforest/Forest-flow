@@ -127,7 +127,6 @@ export function ImportTasks({
       >
         <header className="import-header">
           <div>
-            <span className="eyebrow">IMPORTAÇÃO DE TEXTO</span>
             <h2 id="import-heading" tabIndex={-1} ref={heading}>
               Importar atividades
             </h2>
@@ -375,6 +374,7 @@ export function ImportTasks({
               )}
               <button
                 className="primary"
+                data-busy={busy || undefined}
                 disabled={
                   busy ||
                   !selected.length ||
@@ -406,6 +406,7 @@ export function ImportTasks({
             <button
               className="primary"
               disabled={busy || !text.trim()}
+              data-busy={busy || undefined}
               onClick={() => void analyze()}
             >
               {busy ? 'Preparando cartões…' : 'Preparar cartões'}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Leaf } from 'lucide-react';
 import type { User } from './types';
+import { Brand } from './Brand';
+import { tilt, untilt, useAmbientPause } from './motion';
 type Session = { authenticated?: boolean; user?: User | null; error?: string };
 export function AuthGate({
   children,
@@ -19,6 +20,7 @@ export function AuthGate({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useAmbientPause();
   async function applySession(session: Session) {
     setAuthenticated(!!session.authenticated);
     setUser(session.user || null);
@@ -92,19 +94,29 @@ export function AuthGate({
     }
   }
   if (loading)
-    return <div className="auth-shell">Conectando ao Forest Flow…</div>;
+    return (
+      <div className="auth-shell">
+        <p className="auth-status" role="status">
+          Conectando ao Forest Flow…
+        </p>
+      </div>
+    );
   if (user) return children(user, logout, switchProfile);
   return (
-    <div className="auth-shell">
+    <div className={'auth-shell' + (authenticated ? ' is-lit' : '')}>
+      <div className="ambient" aria-hidden="true">
+        <i />
+        <i />
+      </div>
+      <div className="lamp" aria-hidden="true">
+        <i className="lamp-cord" />
+        <i className="lamp-shade" />
+        <i className="lamp-bulb" />
+        <i className="lamp-glow" />
+      </div>
       <div className={'auth-card' + (authenticated ? ' profile-card' : '')}>
         <div className="brand">
-          <span className="brand-icon">
-            <Leaf size={24} />
-          </span>
-          <span>
-            forest<span className="brand-light">flow</span>
-            <small>FOREST PAPER</small>
-          </span>
+          <Brand />
         </div>
         <h1>
           {authenticated ? 'Quem está usando?' : 'Acesso da equipe de TI'}
@@ -122,12 +134,15 @@ export function AuthGate({
         {authenticated ? (
           <>
             <div className="profile-grid">
-              {profiles.map((profile) => (
+              {profiles.map((profile, index) => (
                 <button
                   type="button"
                   className="profile-option"
                   key={profile.id}
                   disabled={busy}
+                  style={{ '--i': index } as React.CSSProperties}
+                  onPointerMove={tilt}
+                  onPointerLeave={untilt}
                   onClick={() => void chooseProfile(profile.id)}
                 >
                   <span
@@ -183,7 +198,11 @@ export function AuthGate({
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            <button className="primary" disabled={busy}>
+            <button
+              className="primary"
+              disabled={busy}
+              data-busy={busy || undefined}
+            >
               {busy ? 'Entrando…' : 'Entrar'}
             </button>
           </form>

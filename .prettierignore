@@ -2,3 +2,5 @@ node_modules/
 .wrangler/
 dist/
 package-lock.json
+
+.impeccable/

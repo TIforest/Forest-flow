@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-27T18:10:00-03:00",
+  "title": "Design System: Forest Flow",
+  "extensions": {
+    "colorMeta": {
+      "lime": { "role": "primary", "displayName": "Verde Claro / Limão", "canonical": "#c5f249", "tonalRamp": ["oklch(22% 0.07 122)", "oklch(34% 0.10 122)", "oklch(46% 0.14 122)", "oklch(58% 0.17 122)", "oklch(70% 0.19 122)", "oklch(82% 0.20 122)", "oklch(91% 0.20 122)", "oklch(96% 0.10 122)"] },
+      "lime-soft": { "role": "primary", "displayName": "Limão suave (14 %)", "canonical": "rgba(197, 242, 73, 0.14)" },
+      "lime-line": { "role": "primary", "displayName": "Limão linha (45 %)", "canonical": "rgba(197, 242, 73, 0.45)" },
+      "lime-hover": { "role": "primary", "displayName": "Limão hover", "canonical": "#d3f76a" },
+      "kraft": { "role": "secondary", "displayName": "Bege Kraft", "canonical": "#b19873", "tonalRamp": ["oklch(18% 0.03 78)", "oklch(28% 0.04 78)", "oklch(40% 0.05 78)", "oklch(52% 0.06 78)", "oklch(67% 0.06 78)", "oklch(78% 0.06 78)", "oklch(88% 0.05 78)", "oklch(95% 0.03 78)"] },
+      "kraft-bright": { "role": "secondary", "displayName": "Kraft claro (texto)", "canonical": "#d9bf95" },
+      "kraft-soft": { "role": "secondary", "displayName": "Kraft suave (18 %)", "canonical": "rgba(177, 152, 115, 0.18)" },
+      "lilac": { "role": "tertiary", "displayName": "Roxo Destaque / Lilás", "canonical": "#c1b4ee", "tonalRamp": ["oklch(18% 0.06 295)", "oklch(30% 0.09 295)", "oklch(42% 0.12 295)", "oklch(55% 0.12 295)", "oklch(67% 0.10 295)", "oklch(79% 0.08 295)", "oklch(88% 0.05 295)", "oklch(95% 0.02 295)"] },
+      "lilac-soft": { "role": "tertiary", "displayName": "Lilás suave (16 %)", "canonical": "rgba(193, 180, 238, 0.16)" },
+      "ink-0": { "role": "neutral", "displayName": "Verde Escuro / chão", "canonical": "#0a252a", "tonalRamp": ["oklch(15% 0.025 205)", "oklch(24% 0.03 205)", "oklch(33% 0.035 205)", "oklch(44% 0.04 205)", "oklch(56% 0.04 205)", "oklch(70% 0.035 205)", "oklch(84% 0.025 205)", "oklch(95% 0.01 205)"] },
+      "ink-1": { "role": "neutral", "displayName": "Papel 1 (painéis)", "canonical": "#0c2a30" },
+      "ink-2": { "role": "neutral", "displayName": "Papel 2 (cartões)", "canonical": "#103a41" },
+      "ink-3": { "role": "neutral", "displayName": "Papel 3 (hover)", "canonical": "#164850" },
+      "ink-4": { "role": "neutral", "displayName": "Papel 4 (scrollbar)", "canonical": "#1d5560" },
+      "line": { "role": "neutral", "displayName": "Hairline (branco 10 %)", "canonical": "rgba(255, 255, 255, 0.1)" },
+      "line-strong": { "role": "neutral", "displayName": "Hairline forte (branco 18 %)", "canonical": "rgba(255, 255, 255, 0.18)" },
+      "glass": { "role": "neutral", "displayName": "Vidro (branco 4,5 %)", "canonical": "rgba(255, 255, 255, 0.045)" },
+      "glass-strong": { "role": "neutral", "displayName": "Vidro forte (branco 8 %)", "canonical": "rgba(255, 255, 255, 0.08)" },
+      "well": { "role": "neutral", "displayName": "Poço dos campos (preto 22 %)", "canonical": "rgba(0, 0, 0, 0.22)" },
+      "text": { "role": "neutral", "displayName": "Texto", "canonical": "#f3f6f4", "tonalRamp": ["oklch(15% 0.005 160)", "oklch(27% 0.005 160)", "oklch(39% 0.005 160)", "oklch(51% 0.005 160)", "oklch(63% 0.005 160)", "oklch(75% 0.005 160)", "oklch(87% 0.005 160)", "oklch(97% 0.004 160)"] },
+      "text-2": { "role": "neutral", "displayName": "Texto secundário (verde-acinzentado)", "canonical": "#a6bdb9" },
+      "text-3": { "role": "neutral", "displayName": "Texto terciário", "canonical": "#7d9a96" },
+      "danger": { "role": "neutral", "displayName": "Perigo (só excluir/erro)", "canonical": "#f08a7e", "tonalRamp": ["oklch(18% 0.06 28)", "oklch(30% 0.10 28)", "oklch(42% 0.13 28)", "oklch(54% 0.15 28)", "oklch(64% 0.14 28)", "oklch(72% 0.13 28)", "oklch(84% 0.08 28)", "oklch(94% 0.03 28)"] },
+      "danger-soft": { "role": "neutral", "displayName": "Perigo suave (14 %)", "canonical": "rgba(240, 138, 126, 0.14)" },
+      "danger-text": { "role": "neutral", "displayName": "Texto de erro", "canonical": "#ffd1ca" },
+      "scrim": { "role": "neutral", "displayName": "Scrim dos overlays", "canonical": "rgba(3, 14, 17, 0.6)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Título da aba (h1); 24 px no celular e no login." },
+      "numeral": { "displayName": "Numeral", "purpose": "Os quatro números da faixa de resumo, tabulares, com contagem animada de 600 ms." },
+      "headline": { "displayName": "Headline", "purpose": "Título de painel lateral, diálogo e seções de página (18–22 px)." },
+      "title": { "displayName": "Title", "purpose": "Título do cartão de tarefa e do registro de integrante; 14 px em placas de coluna." },
+      "body": { "displayName": "Body", "purpose": "Corpo do documento, campos, comentários, navegação." },
+      "body-sm": { "displayName": "Body small", "purpose": "Descrição do cartão (3 linhas), rodapés, subtítulos, avisos." },
+      "label": { "displayName": "Label", "purpose": "Rótulos de campo em text-2 com o texto em limão; botões secundários." },
+      "caption": { "displayName": "Caption", "purpose": "Pílulas de contagem, selos, rodapé, dicas; mínimo 11 px só em sub-rótulos existentes." },
+      "brand": { "displayName": "Brand", "purpose": "Lockup forest(700)+flow(300) com 'Forest Paper' 11 px kraft-bright." }
+    },
+    "shadows": [
+      { "name": "card-rest", "value": "0 1px 2px rgba(0, 0, 0, 0.3)", "purpose": "Cartão de tarefa em repouso." },
+      { "name": "shadow-1", "value": "0 2px 6px rgba(0, 0, 0, 0.28), 0 10px 28px rgba(0, 0, 0, 0.28)", "purpose": "Hover de cartões, registros e perfis; formulário de integrante." },
+      { "name": "shadow-2", "value": "0 8px 20px rgba(0, 0, 0, 0.4), 0 28px 60px rgba(0, 0, 0, 0.4)", "purpose": "Painel lateral, diálogo, cartão de login, toast." },
+      { "name": "focus-halo", "value": "0 0 0 3px rgba(197, 242, 73, 0.14)", "purpose": "Campos, busca e filtro em foco (com borda limão)." },
+      { "name": "drop-halo", "value": "0 0 0 4px rgba(197, 242, 73, 0.12)", "purpose": "Coluna como alvo de soltar (kraft 14 % na coluna Bloqueado)." },
+      { "name": "primary-glow", "value": "0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 6px 18px rgba(197, 242, 73, 0.25)", "purpose": "Hover do botão primário." },
+      { "name": "lamp-lit", "value": "0 0 10px 3px rgba(197, 242, 73, 0.75), 0 0 40px 10px rgba(197, 242, 73, 0.3)", "purpose": "Lâmpada do login após autenticar." },
+      { "name": "brand-glow", "value": "drop-shadow(0 4px 12px rgba(197, 242, 73, 0.25))", "purpose": "Filtro sob o símbolo da marca." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Easing único de entradas, painéis, hover e luminária." },
+      { "name": "t-fast", "value": "160ms", "purpose": "Feedback de botão, campo, chip, cartão (cor, borda, sombra, transform)." },
+      { "name": "t-base", "value": "260ms", "purpose": "Indicador de navegação, scrims, spotlight, colunas, formulário de integrante (pop)." },
+      { "name": "t-slow", "value": "600ms", "purpose": "Acender a luminária, montagem da casca (rise/rise-x), contagem dos números." },
+      { "name": "stagger", "value": "50ms", "purpose": "Escalonamento dos cartões (--i, limitado a 12); perfis usam 70 ms + 200 ms." },
+      { "name": "panel-slide", "value": "slide-panel 360ms (translateX 28px → 0)", "purpose": "Painel lateral da tarefa." },
+      { "name": "dialog-pop", "value": "pop 320ms (translateY 10px, scale .985 → 1)", "purpose": "Diálogo de importação." },
+      { "name": "toast-in", "value": "toast-in 400ms (translateY 14px → 0)", "purpose": "Toast inferior." },
+      { "name": "plate-pulse", "value": "plate-pulse 900ms (halo 6px na tinta do status)", "purpose": "Placa da coluna ao receber um cartão." },
+      { "name": "lamp-on", "value": "lamp-on 600ms (scaleY .5 → 1)", "purpose": "Cone de luz da luminária ao autenticar." },
+      { "name": "ambient-drift", "value": "drift-a 46s / drift-b 58s ease-in-out infinite", "purpose": "Luzes ambiente; pausadas com .is-hidden, removidas em reduced-motion e abaixo de 640 px." },
+      { "name": "shimmer", "value": "shimmer 1.4s linear infinite", "purpose": "Esqueleto de carregamento do quadro." },
+      { "name": "spin", "value": "spin 0.8s linear infinite", "purpose": "Spinner de botão ocupado (data-busy)." },
+      { "name": "settled", "value": ".is-settled .task { animation: none }", "purpose": "Depois da montagem, atualizações de dados não reanimam." },
+      { "name": "reduced-motion", "value": "animation/transition 0.01ms, .ambient display:none, tilt desligado", "purpose": "prefers-reduced-motion desliga tudo." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "1180px", "purpose": "Trilho 204 px, respiro 24 px, quadro gap 12 px." },
+      { "name": "rail", "value": "920px", "purpose": "Trilho vira rail de 72 px; resumo 2×2; quadro rola em X; reunião em 1 coluna." },
+      { "name": "mobile", "value": "640px", "purpose": "Barra inferior; sem vidro, luzes ambiente ou luminária; quadro em 1 coluna." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A única superfície limão sólida da tela; sobe 1 px e brilha no hover.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>Nova atividade</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 132px; padding: 0 18px; border: 0; border-radius: var(--r-ctl, 8px); background: var(--lime, #c5f249); color: var(--ink-0, #0a252a); font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset; transition: background-color 160ms, transform 160ms, box-shadow 160ms; } .ds-btn-primary:hover { background: #d3f76a; transform: translateY(-1px); box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 6px 18px rgba(197,242,73,0.25); } .ds-btn-primary:active { transform: translateY(0) scale(0.985); } .ds-btn-primary:focus-visible { outline: 2px solid var(--lime, #c5f249); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.55; transform: none; box-shadow: none; cursor: not-allowed; }"
+    },
+    {
+      "name": "Botão secundário",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Vidro com hairline forte; clareia no hover.",
+      "html": "<button class=\"ds-btn-secondary\">Importar texto</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: var(--r-ctl, 8px); border: 1px solid var(--line-strong, rgba(255,255,255,0.18)); background: var(--glass, rgba(255,255,255,0.045)); color: var(--text, #f3f6f4); font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color 160ms, border-color 160ms, transform 160ms; } .ds-btn-secondary:hover { background: var(--glass-strong, rgba(255,255,255,0.08)); border-color: rgba(255,255,255,0.3); } .ds-btn-secondary:active { transform: scale(0.985); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--lime, #c5f249); outline-offset: 2px; }"
+    },
+    {
+      "name": "Botão de texto",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Só texto em text-2; acende em limão sobre lime-soft no hover.",
+      "html": "<button class=\"ds-btn-text\">Trocar perfil</button>",
+      "css": ".ds-btn-text { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--text-2, #a6bdb9); font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: color 160ms, background-color 160ms; } .ds-btn-text:hover { color: var(--lime, #c5f249); background: var(--lime-soft, rgba(197,242,73,0.14)); } .ds-btn-text:focus-visible { outline: 2px solid var(--lime, #c5f249); outline-offset: 2px; border-radius: 4px; }"
+    },
+    {
+      "name": "Campo de texto",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Rótulo em text-2 com texto limão; poço escuro; foco com borda limão e halo de 3 px.",
+      "html": "<label class=\"ds-field\"><span>Título</span><input class=\"ds-input\" type=\"text\" placeholder=\"O que precisa ser feito\" /></label>",
+      "css": ".ds-field { display: block; color: var(--text-2, #a6bdb9); font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 13px; font-weight: 500; } .ds-field > span { color: var(--lime, #c5f249); } .ds-input { display: block; width: 100%; margin-top: 8px; padding: 11px 13px; border-radius: var(--r-ctl, 8px); border: 1px solid var(--line-strong, rgba(255,255,255,0.18)); background: rgba(0,0,0,0.22); color: var(--text, #f3f6f4); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.45; caret-color: var(--lime, #c5f249); transition: border-color 160ms, box-shadow 160ms, background-color 160ms; } .ds-input::placeholder { color: var(--text-3, #7d9a96); } .ds-input:focus { outline: none; border-color: var(--lime, #c5f249); box-shadow: 0 0 0 3px rgba(197,242,73,0.14); background: rgba(0,0,0,0.3); } .ds-input[readonly] { color: var(--text-2, #a6bdb9); background: rgba(255,255,255,0.03); border-style: dashed; }"
+    },
+    {
+      "name": "Navegação do trilho",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Itens de 42 px com indicador lime-soft deslizante (translateY índice × 46 px, 260 ms) e traço limão 3×18.",
+      "html": "<nav class=\"ds-nav\" style=\"--nav-index:1\"><i class=\"ds-nav-indicator\"></i><button class=\"ds-nav-item\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"7\" height=\"7\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"3\" y=\"14\" rx=\"1\"/></svg>Minha semana</button><button class=\"ds-nav-item active\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>Equipe<span class=\"ds-nav-count\">4</span></button><button class=\"ds-nav-item\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 2v4\"/><path d=\"M16 2v4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M3 10h18\"/></svg>Reunião semanal</button></nav>",
+      "css": ".ds-nav { position: relative; display: grid; gap: 4px; width: 204px; padding: 12px; border-radius: 14px; border: 1px solid var(--line, rgba(255,255,255,0.1)); background: var(--glass, rgba(255,255,255,0.045)); font-family: Sora, 'Segoe UI', system-ui, sans-serif; } .ds-nav-indicator { position: absolute; left: 12px; top: 12px; width: calc(100% - 24px); height: 42px; border-radius: var(--r-ctl, 8px); background: var(--lime-soft, rgba(197,242,73,0.14)); transform: translateY(calc(var(--nav-index, 0) * 46px)); transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1); pointer-events: none; } .ds-nav-indicator::before { content: ''; position: absolute; left: 0; top: 12px; width: 3px; height: 18px; border-radius: 2px; background: var(--lime, #c5f249); } .ds-nav-item { position: relative; display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 12px 0 14px; border: 0; border-radius: var(--r-ctl, 8px); background: none; color: var(--text-2, #a6bdb9); font: inherit; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; transition: color 160ms; } .ds-nav-item:hover { color: var(--text, #f3f6f4); } .ds-nav-item.active { color: var(--lime, #c5f249); font-weight: 600; } .ds-nav-item:focus-visible { outline: 2px solid var(--lime, #c5f249); outline-offset: 2px; } .ds-nav-count { margin-left: auto; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text-2, #a6bdb9); } .ds-nav-item.active .ds-nav-count { background: rgba(197,242,73,0.18); color: var(--lime, #c5f249); }"
+    },
+    {
+      "name": "Chip de integrante",
+      "kind": "chip",
+      "refersTo": "chip-member",
+      "description": "Pílula de vidro com ponto de 9 px na cor da pessoa; selecionada mistura 28 % da cor no fundo.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\" style=\"--member-color:#4f9cf0\"><i class=\"ds-dot\"></i>Bruno Alves</button><button class=\"ds-chip selected\" style=\"--member-color:#8f74d9\"><i class=\"ds-dot\"></i>Eduardo Fortes</button><span class=\"ds-chip-count\">11</span><span class=\"ds-chip-high\">Alta prioridade</span><span class=\"ds-chip-coord\">Coordenação</span></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: Sora, 'Segoe UI', system-ui, sans-serif; } .ds-chip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 10px; border-radius: 999px; border: 1px solid var(--line, rgba(255,255,255,0.1)); background: var(--glass, rgba(255,255,255,0.045)); color: var(--text-2, #a6bdb9); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 160ms, border-color 160ms, color 160ms, transform 160ms; } .ds-chip:hover { border-color: var(--line-strong, rgba(255,255,255,0.18)); color: var(--text, #f3f6f4); transform: translateY(-1px); } .ds-chip.selected { background: color-mix(in srgb, var(--member-color) 28%, transparent); border-color: var(--member-color); color: var(--text, #f3f6f4); } .ds-chip:focus-visible { outline: 2px solid var(--lime, #c5f249); outline-offset: 2px; } .ds-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--member-color); box-shadow: 0 0 0 2px rgba(255,255,255,0.12); } .ds-chip-count { min-width: 26px; text-align: center; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(255,255,255,0.07); color: var(--text-2, #a6bdb9); } .ds-chip-high { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--kraft-soft, rgba(177,152,115,0.18)); color: var(--kraft-bright, #d9bf95); } .ds-chip-coord { padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--lilac-soft, rgba(193,180,238,0.16)); color: var(--lilac, #c1b4ee); }"
+    },
+    {
+      "name": "Cartão de tarefa",
+      "kind": "card",
+      "refersTo": "card-task",
+      "description": "Papel opaco ink-2 com ímã 22×6 na cor do responsável, nota de bloqueio em kraft e rodapé com avatar e prazo; sobe 2 px no hover.",
+      "html": "<button class=\"ds-task\" style=\"--member-color:#2fb59c\"><div class=\"ds-task-top\"><span class=\"ds-task-high\">Alta prioridade</span><svg class=\"ds-task-arrow\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7h10v10\"/><path d=\"M7 17 17 7\"/></svg></div><h3>Monitoramento Notebooks</h3><div class=\"ds-block-note\">Ainda decidindo a forma de hospedagem do servidor.</div><div class=\"ds-task-footer\"><span class=\"ds-person\"><i class=\"ds-avatar\">T</i>Tonello</span><span class=\"ds-due\">03 de nov.</span></div></button>",
+      "css": ".ds-task { position: relative; display: block; width: 320px; text-align: left; padding: 14px 16px 12px; border-radius: var(--r-card, 10px); border: 1px solid var(--line, rgba(255,255,255,0.1)); background: var(--ink-2, #103a41); color: var(--text, #f3f6f4); font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 14px; cursor: grab; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms, border-color 160ms, background-color 160ms; } .ds-task::before { content: ''; position: absolute; top: 18px; left: 16px; width: 22px; height: 6px; border-radius: 3px; background: var(--member-color); box-shadow: 0 1px 3px rgba(0,0,0,0.35); } .ds-task:hover { transform: translateY(-2px); background: var(--ink-3, #164850); border-color: var(--line-strong, rgba(255,255,255,0.18)); box-shadow: 0 2px 6px rgba(0,0,0,0.28), 0 10px 28px rgba(0,0,0,0.28); } .ds-task:focus-visible { outline: 2px solid var(--lime, #c5f249); outline-offset: 2px; } .ds-task-top { display: flex; align-items: center; gap: 8px; padding-left: 32px; min-height: 20px; color: var(--text-3, #7d9a96); } .ds-task-high { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--kraft-soft, rgba(177,152,115,0.18)); color: var(--kraft-bright, #d9bf95); } .ds-task-arrow { margin-left: auto; opacity: 0; transform: translate(-2px, 2px); transition: opacity 160ms, transform 160ms; } .ds-task:hover .ds-task-arrow, .ds-task:focus-visible .ds-task-arrow { opacity: 1; transform: none; color: var(--lime, #c5f249); } .ds-task h3 { margin: 8px 0 10px; font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; } .ds-block-note { margin: -2px 0 12px; padding: 9px 11px; border-radius: 7px; background: var(--kraft-soft, rgba(177,152,115,0.18)); color: var(--kraft-bright, #d9bf95); font-size: 13px; line-height: 1.5; } .ds-block-note::before { content: 'Bloqueio'; display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; opacity: 0.85; margin-bottom: 2px; } .ds-task-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line, rgba(255,255,255,0.1)); font-size: 13px; color: var(--text-2, #a6bdb9); } .ds-person { display: flex; align-items: center; gap: 8px; } .ds-avatar { display: inline-flex; justify-content: center; align-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--member-color); color: #fff; font-style: normal; font-weight: 700; font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,0.25); } .ds-due { color: var(--text, #f3f6f4); font-weight: 500; white-space: nowrap; }"
+    },
+    {
+      "name": "Placa de coluna",
+      "kind": "custom",
+      "refersTo": "column",
+      "description": "Cabeçalho da coluna com ícone na tinta do status (limão / kraft / lilás), nome 14 px/600 e contagem em pílula.",
+      "html": "<div class=\"ds-columns\"><div class=\"ds-column progress\"><div class=\"ds-plate\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg><h2>Em andamento</h2><span>11</span></div></div><div class=\"ds-column blocked\"><div class=\"ds-plate\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/></svg><h2>Bloqueado</h2><span>1</span></div></div><div class=\"ds-column done\"><div class=\"ds-plate\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/></svg><h2>Concluído</h2><span>2</span></div></div></div>",
+      "css": ".ds-columns { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 16px; font-family: Sora, 'Segoe UI', system-ui, sans-serif; } .ds-column { display: flex; flex-direction: column; min-height: 120px; padding: 8px; border-radius: var(--r-panel, 14px); border: 1px solid var(--line, rgba(255,255,255,0.1)); background: rgba(0,0,0,0.16); transition: background-color 260ms, box-shadow 260ms, border-color 260ms; } .ds-plate { display: flex; align-items: center; gap: 9px; padding: 10px 10px 12px; border-radius: 8px; color: var(--text-2, #a6bdb9); } .ds-plate h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text, #f3f6f4); } .ds-plate > span { margin-left: auto; min-width: 26px; text-align: center; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(255,255,255,0.07); color: var(--text-2, #a6bdb9); } .ds-column.progress .ds-plate > svg { color: var(--lime, #c5f249); } .ds-column.blocked .ds-plate > svg { color: var(--kraft-bright, #d9bf95); } .ds-column.done .ds-plate > svg { color: var(--lilac, #c1b4ee); } .ds-column:hover { border-color: var(--line-strong, rgba(255,255,255,0.18)); }"
+    },
+    {
+      "name": "Faixa de resumo (vidro)",
+      "kind": "custom",
+      "refersTo": "stats-glass",
+      "description": "Vidro da casca: branco 4,5 % + blur 16 px + hairline, células separadas por hairline, número 32 px tabular, ícone tingido pela tinta do status.",
+      "html": "<div class=\"ds-stats\"><div class=\"ds-stat\"><i class=\"ds-stat-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"7\" height=\"7\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"3\" y=\"14\" rx=\"1\"/></svg></i><div><span>Atividades da semana</span><strong>14</strong></div></div><div class=\"ds-stat progress\"><i class=\"ds-stat-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg></i><div><span>Em andamento</span><strong>11</strong></div></div><div class=\"ds-stat done\"><i class=\"ds-stat-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/></svg></i><div><span>Concluídas</span><strong>2</strong></div></div><div class=\"ds-stat blocked is-on\"><i class=\"ds-stat-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/></svg></i><div><span>Precisam de atenção</span><strong>1</strong></div></div></div>",
+      "css": ".ds-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line, rgba(255,255,255,0.1)); border-radius: var(--r-panel, 14px); background: var(--glass, rgba(255,255,255,0.045)); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); overflow: hidden; font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--text, #f3f6f4); } .ds-stat { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border-right: 1px solid var(--line, rgba(255,255,255,0.1)); } .ds-stat:last-child { border-right: 0; } .ds-stat > div > span { display: block; font-size: 12px; font-weight: 500; color: var(--text-2, #a6bdb9); margin-bottom: 4px; } .ds-stat strong { display: block; font-size: 32px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; } .ds-stat-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.06); color: var(--text-2, #a6bdb9); font-style: normal; } .ds-stat.progress .ds-stat-icon { color: var(--lime, #c5f249); background: var(--lime-soft, rgba(197,242,73,0.14)); } .ds-stat.done .ds-stat-icon { color: var(--lilac, #c1b4ee); background: var(--lilac-soft, rgba(193,180,238,0.16)); } .ds-stat.blocked .ds-stat-icon { color: var(--kraft-bright, #d9bf95); background: var(--kraft-soft, rgba(177,152,115,0.18)); } .ds-stat.blocked.is-on strong { color: var(--kraft-bright, #d9bf95); }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Pílula de vidro petróleo com borda lime-line e ícone limão; entra de baixo em 400 ms.",
+      "html": "<div class=\"ds-toast\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/></svg>Atividade movida para Concluído</div>",
+      "css": ".ds-toast { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 999px; border: 1px solid var(--lime-line, rgba(197,242,73,0.45)); background: rgba(12,42,48,0.9); backdrop-filter: blur(14px); color: var(--text, #f3f6f4); font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 13px; font-weight: 500; box-shadow: 0 8px 20px rgba(0,0,0,0.4), 0 28px 60px rgba(0,0,0,0.4); animation: ds-toast-in 400ms cubic-bezier(0.16, 1, 0.3, 1) backwards; } .ds-toast svg { color: var(--lime, #c5f249); } @keyframes ds-toast-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }"
+    },
+    {
+      "name": "Luminária (acender a sala)",
+      "kind": "custom",
+      "refersTo": "auth-card",
+      "description": "Assinatura do login: haste, cúpula trapezoidal, lâmpada e cone de luz; apagada em repouso, acende com .is-lit em 600 ms. Passe o mouse para acender.",
+      "html": "<div class=\"ds-room\"><div class=\"ds-lamp\"><i class=\"ds-lamp-cord\"></i><i class=\"ds-lamp-shade\"></i><i class=\"ds-lamp-bulb\"></i><i class=\"ds-lamp-glow\"></i></div><div class=\"ds-auth-card\"><strong>Quem está usando?</strong><span>Selecione seu perfil para acompanhar suas atividades.</span></div></div>",
+      "css": ".ds-room { position: relative; width: 360px; height: 300px; overflow: hidden; border-radius: 14px; background: radial-gradient(600px 350px at 12% -10%, #123a42 0%, transparent 60%), var(--ink-0, #0a252a); font-family: Sora, 'Segoe UI', system-ui, sans-serif; } .ds-lamp { position: absolute; top: 0; left: 50%; width: 260px; height: 300px; transform: translateX(-50%); pointer-events: none; z-index: 2; } .ds-lamp-cord { position: absolute; top: 0; left: 50%; width: 2px; height: 46px; background: linear-gradient(rgba(255,255,255,0.1), rgba(255,255,255,0.18)); transform: translateX(-50%); } .ds-lamp-shade { position: absolute; top: 46px; left: 50%; width: 94px; height: 28px; transform: translateX(-50%); background: linear-gradient(#174a52, #0f363c); clip-path: polygon(32% 0, 68% 0, 100% 100%, 0 100%); box-shadow: inset 0 -2px 0 rgba(197,242,73,0.4); transition: background 600ms, box-shadow 600ms; } .ds-lamp-bulb { position: absolute; top: 70px; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: rgba(197,242,73,0.35); transform: translateX(-50%); transition: background 600ms, box-shadow 600ms; } .ds-lamp-glow { position: absolute; top: 74px; left: 50%; width: 260px; height: 230px; transform: translateX(-50%); transform-origin: top center; background: conic-gradient(from 161deg at 50% 0%, transparent 0deg, rgba(197,242,73,0.16) 9deg, rgba(197,242,73,0.3) 19deg, rgba(197,242,73,0.16) 29deg, transparent 38deg, transparent 360deg); -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,0.7) 40%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,0.7) 40%, transparent 100%); mix-blend-mode: screen; opacity: 0; transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-room:hover .ds-lamp-shade, .ds-room.is-lit .ds-lamp-shade { background: linear-gradient(#1f5d67, #164850); box-shadow: inset 0 -2px 0 var(--lime, #c5f249); } .ds-room:hover .ds-lamp-bulb, .ds-room.is-lit .ds-lamp-bulb { background: var(--lime, #c5f249); box-shadow: 0 0 10px 3px rgba(197,242,73,0.75), 0 0 40px 10px rgba(197,242,73,0.3); } .ds-room:hover .ds-lamp-glow, .ds-room.is-lit .ds-lamp-glow { opacity: 1; } .ds-auth-card { position: absolute; left: 24px; right: 24px; top: 112px; padding: 22px 24px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.18); background: var(--ink-1, #0c2a30); color: var(--text, #f3f6f4); box-shadow: 0 8px 20px rgba(0,0,0,0.4), 0 28px 60px rgba(0,0,0,0.4); transition: border-color 600ms; } .ds-room:hover .ds-auth-card, .ds-room.is-lit .ds-auth-card { border-color: rgba(197,242,73,0.35); } .ds-auth-card strong { display: block; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; } .ds-auth-card span { display: block; margin-top: 6px; font-size: 13px; color: var(--text-2, #a6bdb9); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Luz na fábrica à noite",
+    "overview": "O Forest Flow é uma sala petróleo depois do expediente: o chão é o Verde Escuro da Forest Paper (ink-0) com profundidade feita de dois gradientes radiais fixos e duas luzes ambiente lentas (uma na cor de quem está usando, outra roxa) que derivam por 46–58 s e param quando a aba fica oculta. Dentro dessa sala a luz limão é escassa de propósito: ela aparece só onde há ação (o único botão sólido da tela), estado ativo (aba, foco, caret, seleção) ou confirmação (toast, histórico, luminária acesa). Tudo o que precisa ser lido fica em papel opaco (ink-1/ink-2); o vidro existe só na casca (trilho lateral, faixa de resumo, scrims e toast), nunca em cartão ou formulário.\n\nA densidade é de ferramenta de uso diário: corpo em 14 px, cartões de 14×16 px de respiro, hairlines de 1 px em branco 10 % separando tudo. Cada status tem uma tinta única (andamento = limão, bloqueado = kraft, concluído = roxo) usada no ícone da placa, no resumo, no painel e no pulso da coluna; a cor da pessoa é dado dela (escolhida em Integrantes) e aparece apenas como um ímã de 22×6 no canto do cartão e como avatar sólido. O movimento é curto e só na montagem: subida de 12 px com ease-out exponencial, escalonada em 50 ms, desligada depois que o quadro assenta e por completo em prefers-reduced-motion.\n\nO que a construção recusou e não deve voltar: o kanban cinza-claro de SaaS, o dark mode com neon em todo canto, o verde #24563e do site antigo (não é da marca), bordas grossas de cor por responsável e qualquer logo da empresa (a marca é o símbolo próprio do app em src/Brand.tsx).",
+    "keyCharacteristics": [
+      "Chão ink-0 com gradiente radial e duas luzes ambiente desfocadas (blur 80 px, opacidade 0,16/0,12), pausadas fora de vista.",
+      "Vidro (branco 4,5 % + blur 16–18 px + hairline) só na casca; papel opaco onde se lê.",
+      "Limão como luz escassa: um botão sólido por tela, aba ativa, foco, confirmação.",
+      "Uma tinta por status: limão, kraft, roxo; cor do responsável só como ímã 22×6 e avatar.",
+      "Sora variável self-hosted, única família, números tabulares.",
+      "Motion: cubic-bezier(0.16, 1, 0.3, 1), 160/260/600 ms, escalonamento 50 ms, entrada só na montagem."
+    ],
+    "rules": [
+      { "name": "The Scarce Light Rule", "body": "Existe uma única superfície limão sólida por tela (o botão primário). Todo outro limão é linha, texto, halo ou fundo a 14 %. Se duas áreas sólidas de limão aparecem juntas, uma delas está errada.", "section": "colors" },
+      { "name": "The One Ink Per Status Rule", "body": "Em andamento é limão, Bloqueado é kraft, Concluído é lilás, em todo lugar (placa, resumo, painel, pulso). Nenhum status usa vermelho; danger é só para excluir e para erro de sistema.", "section": "colors" },
+      { "name": "The Member Magnet Rule", "body": "A cor do integrante é dado do usuário (escolhida em Integrantes, sugestões em src/Members.tsx), e aparece no cartão apenas como ímã de 22×6 px no canto superior esquerdo, como avatar sólido redondo, como ponto de 9 px no chip de filtro e como luz ambiente de quem está logado. Nunca como borda grossa, nunca como fundo de cartão.", "section": "colors" },
+      { "name": "The Tabular Numbers Rule", "body": "Todo número (contagens, datas, resumo) é tabular por herança do :root; nenhuma superfície desliga isso.", "section": "typography" },
+      { "name": "The No Uppercase Rule", "body": "O sistema não usa caixa alta nem letter-spacing positivo acima de 0,04 em; hierarquia vem de peso e cor, não de tracking.", "section": "typography" },
+      { "name": "The Glass Shell Rule", "body": "backdrop-filter só aparece em trilho, faixa de resumo, scrims e toast. Cartão, coluna, painel, diálogo e formulário são opacos (ink-1/ink-2); se um texto longo está sobre vidro, está no lugar errado.", "section": "elevation" },
+      { "name": "The Lift On Hover Rule", "body": "Superfícies clicáveis sobem 1–2 px e trocam line por line-strong no hover; a sombra responde ao estado, nunca é decoração em repouso (exceto painéis flutuantes, que já nascem elevados).", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reservar o limão sólido para uma única superfície por tela (o botão primário); o resto do limão é linha, texto ou fundo a 14 %.",
+      "Do colorir status com uma tinta só em todos os lugares: andamento limão, bloqueado kraft (kraft-bright em texto), concluído lilás.",
+      "Do mostrar a cor do integrante apenas como ímã 22×6, avatar sólido, ponto de 9 px no chip e luz ambiente; ela é dado do usuário, não token do sistema.",
+      "Do usar vidro (glass + backdrop-filter) só na casca; cartões, painéis, diálogos e formulários são ink-1/ink-2 opacos.",
+      "Do separar com hairlines de 1 px (line, line-strong) e elevar no hover (1–2 px + shadow-1), nunca em repouso.",
+      "Do animar só na montagem com cubic-bezier(0.16, 1, 0.3, 1): 160 ms feedback, 260 ms painéis e indicador, 600 ms acender; escalonar em 50 ms; marcar is-settled depois para que atualizações de dados não reanimem.",
+      "Do respeitar prefers-reduced-motion (todas as durações a 0,01 ms, luzes ambiente removidas, tilt desligado) e pausar as luzes ambiente com a aba oculta (is-hidden).",
+      "Do manter Sora como única família, self-hosted, com números tabulares e font-synthesis: none.",
+      "Do desenhar foco com o anel global limão de 2 px (offset 2 px) ou, em campos, borda limão + halo de 3 px."
+    ],
+    "donts": [
+      "Don't usar o verde #24563e do site antigo, cinzas claros de SaaS nem neon limão espalhado como decoração.",
+      "Don't usar vermelho para status do quadro; danger existe só para excluir e para erro de sistema.",
+      "Don't desenhar a cor do responsável como borda grossa, faixa lateral ou fundo do cartão.",
+      "Don't aplicar backdrop-filter em cartão, coluna, painel ou formulário, nem abaixo de 640 px.",
+      "Don't usar caixa alta, tracking positivo acima de 0,04 em ou uma segunda família tipográfica; o mínimo de corpo é 12 px (11 px só em selos e sub-rótulos já existentes).",
+      "Don't reanimar entradas em atualização de dados, nem usar duração acima de 600 ms fora das luzes ambiente (46–58 s) e do shimmer de carregamento (1,4 s).",
+      "Don't usar o logo da Forest Paper ou sugerir que o símbolo do app é o logo corporativo; a marca é a folha com fluxo de src/Brand.tsx.",
+      "Don't colocar sombras com offset sem blur nem bordas acima de 1 px (exceto o anel de 2 px dos swatches e o traço de 3 px do indicador de navegação)."
+    ]
+  }
+}

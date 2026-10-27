@@ -95,6 +95,7 @@ O build de produção usa `deployment/wrangler.jsonc`, separado do D1 local. Nã
 - `migrations/`: estrutura versionada do D1.
 - `scripts/`: build e testes de integração.
 - `deployment/`: configuração remota.
+- `DESIGN.md` e `PRODUCT.md`: sistema visual (tokens, componentes, movimento) e verdades do produto, gerados no redesign de 27/10/2026. A fonte Sora é servida de `public/fonts`; não há serviço externo em tempo de execução.
 
 ## Importação de texto
 

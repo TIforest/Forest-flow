@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Leaf,
   LayoutDashboard,
   Users,
   CalendarDays,
@@ -16,6 +15,9 @@ import {
   Clock3,
   CircleAlert,
   SlidersHorizontal,
+  Inbox,
+  ArrowLeftRight,
+  LogOut,
 } from 'lucide-react';
 import { statuses, type User, type Task, type Status } from './types';
 import './styles.css';
@@ -25,6 +27,12 @@ import { Continuity } from './Continuity';
 import { Comments } from './Comments';
 import { ImportTasks } from './ImportTasks';
 import { Checklist } from './Checklist';
+import { Brand } from './Brand';
+import { spotlight, useAmbientPause, useCountUp } from './motion';
+
+function Count({ value }: { value: number }) {
+  return <>{useCountUp(value)}</>;
+}
 
 function sunday(value = new Date()) {
   const d = new Date(value);
@@ -92,12 +100,16 @@ function App({
   const [dropTarget, setDropTarget] = useState<Status | null>(null);
   const [moveBusy, setMoveBusy] = useState(false);
   const [initialStatus, setInitialStatus] = useState<Status | undefined>();
+  const [settled, setSettled] = useState(false);
+  const [pulse, setPulse] = useState<Status | null>(null);
+  const [keyboardMove, setKeyboardMove] = useState(false);
   const suppressClick = useRef(false);
   const moving = useRef(false);
   const context = useRef('');
   context.current = `${identity}:${week}`;
   const actor = users.find((u) => u.id === identity) || signedIn;
   const coordinator = actor?.role === 'coordinator';
+  useAmbientPause();
   const colorFor = (id: string) =>
     memberStyle(
       id,
@@ -165,6 +177,19 @@ function App({
     const timer = setTimeout(() => setNotice(''), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
+  // A entrada escalonada dos cartões só acontece na montagem de cada tela;
+  // depois disso, atualizações de dados não a repetem.
+  useEffect(() => {
+    setSettled(false);
+    if (loading) return;
+    const timer = setTimeout(() => setSettled(true), 1100);
+    return () => clearTimeout(timer);
+  }, [loading, view]);
+  useEffect(() => {
+    if (!pulse) return;
+    const timer = setTimeout(() => setPulse(null), 900);
+    return () => clearTimeout(timer);
+  }, [pulse]);
   const visible = tasks.filter(
     (t) =>
       (view !== 'mine' || t.assignee_id === identity) &&
@@ -179,6 +204,7 @@ function App({
   function stopDragging() {
     setDraggedId(null);
     setDropTarget(null);
+    setKeyboardMove(false);
   }
   async function moveTask(task: Task, status: Status) {
     stopDragging();
@@ -204,6 +230,7 @@ function App({
         ),
       );
       setNotice(`Atividade movida para ${statuses[status]}.`);
+      setPulse(status);
     } catch (e) {
       if (context.current === originalContext) setError((e as Error).message);
     } finally {
@@ -211,7 +238,7 @@ function App({
       setMoveBusy(false);
     }
   }
-  function card(task: Task) {
+  function card(task: Task, index = 0) {
     return (
       <button
         className={`task ${draggedId === task.id ? 'is-dragging' : ''}`}
@@ -239,6 +266,7 @@ function App({
           const columns = Object.keys(statuses) as Status[];
           if (e.key === ' ' && !draggedId) {
             e.preventDefault();
+            setKeyboardMove(true);
             setDraggedId(task.id);
             setDropTarget(task.status);
             setNotice(
@@ -268,7 +296,9 @@ function App({
             setNotice('Movimentação cancelada.');
           }
         }}
-        style={colorFor(task.assignee_id)}
+        style={
+          { ...colorFor(task.assignee_id), '--i': index } as React.CSSProperties
+        }
         key={task.id}
         onClick={() => {
           if (!suppressClick.current && !draggedId && !moveBusy) {
@@ -278,9 +308,9 @@ function App({
         }}
       >
         <div className="task-top">
-          <span className={`priority ${task.priority}`}>
-            {task.priority === 'high' ? 'Alta prioridade' : 'Normal'}
-          </span>
+          {task.priority === 'high' && (
+            <span className="priority high">Alta prioridade</span>
+          )}
           {!!task.restricted && <LockKeyhole size={14} aria-label="Restrita" />}
           <ArrowUpRight size={15} />
         </div>
@@ -301,57 +331,62 @@ function App({
       </button>
     );
   }
+  const navItems: [string, string, typeof Users][] = [
+    ['mine', 'Minha semana', LayoutDashboard],
+    ['team', 'Equipe', Users],
+    ['meeting', 'Reunião semanal', CalendarDays],
+    ...(coordinator
+      ? ([['members', 'Integrantes', Users]] as [
+          string,
+          string,
+          typeof Users,
+        ][])
+      : []),
+  ];
+  const navIndex = Math.max(
+    0,
+    navItems.findIndex(([id]) => id === view),
+  );
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={colorFor(identity)}>
+      <div className="ambient" aria-hidden="true">
+        <i />
+        <i />
+      </div>
       <aside className="sidebar">
         <a className="brand" href="/" aria-label="Forest Flow início">
-          <span className="brand-icon">
-            <Leaf size={24} />
-          </span>
-          <span>
-            forest<span className="brand-light">flow</span>
-            <small>FOREST PAPER</small>
-          </span>
+          <Brand />
         </a>
         <div className="workspace">
           <span className="workspace-icon">TI</span>
           <div>
             <strong>Tecnologia da Informação</strong>
-            <small>Ambiente da equipe</small>
+            <small>Espaço de trabalho</small>
           </div>
         </div>
-        <span className="nav-label">ESPAÇO DE TRABALHO</span>
-        <nav>
-          {[
-            ['mine', 'Minha semana', LayoutDashboard],
-            ['team', 'Equipe', Users],
-            ['meeting', 'Reunião semanal', CalendarDays],
-            ...(coordinator ? [['members', 'Integrantes', Users]] : []),
-          ].map(([id, label, Icon]) => {
-            const I = Icon as typeof Users;
-            return (
-              <button
-                key={String(id)}
-                className={view === id ? 'active' : ''}
-                onClick={() => {
-                  setView(String(id));
-                  setPerson('');
-                }}
-              >
-                <I size={19} />
-                {String(label)}
-                {id === 'team' && (
-                  <span className="nav-count">{users.length}</span>
-                )}
-              </button>
-            );
-          })}
+        <nav
+          aria-label="Seções"
+          style={{ '--nav-index': navIndex } as React.CSSProperties}
+        >
+          <span className="nav-indicator" aria-hidden="true" />
+          {navItems.map(([id, label, I]) => (
+            <button
+              key={id}
+              className={view === id ? 'active' : ''}
+              aria-current={view === id ? 'page' : undefined}
+              onClick={() => {
+                setView(id);
+                setPerson('');
+              }}
+            >
+              <I size={19} />
+              {label}
+              {id === 'team' && (
+                <span className="nav-count">{users.length}</span>
+              )}
+            </button>
+          ))}
         </nav>
-        <div className="sidebar-note">
-          <span className="live-dot" />
-          Uma semana, mais clareza.
-          <p>Planeje as entregas e mantenha o time na mesma direção.</p>
-        </div>
         <div className="profile">
           <span className="avatar member-avatar" style={colorFor(identity)}>
             {actor?.name.slice(0, 1) || 'C'}
@@ -360,23 +395,32 @@ function App({
             <strong>{actor?.name || 'Carregando…'}</strong>
             <small>{actor?.job}</small>
           </div>
+          <div className="profile-actions">
+            <button
+              type="button"
+              title="Trocar perfil"
+              onClick={() =>
+                void switchProfile().catch((e) => setError(e.message))
+              }
+            >
+              <ArrowLeftRight size={15} />
+              <span>Trocar perfil</span>
+            </button>
+            <button
+              type="button"
+              title="Sair"
+              onClick={() => void logout().catch((e) => setError(e.message))}
+            >
+              <LogOut size={15} />
+              <span>Sair</span>
+            </button>
+          </div>
         </div>
       </aside>
       <main>
-        <header className="topbar">
-          <span>
-            Workspace <span className="slash">/</span>{' '}
-            <strong>TI · Forest Paper</strong>
-          </span>
-          <span className="demo-label">
-            <span className="live-dot" />
-            Acesso individual
-          </span>
-        </header>
         <div className="content">
           <div className="page-heading">
             <div>
-              <span className="eyebrow">PLANEJAMENTO SEMANAL</span>
               <h1>
                 {view === 'mine'
                   ? 'Minha semana'
@@ -385,14 +429,15 @@ function App({
                     : view === 'meeting'
                       ? 'Reunião semanal'
                       : 'Semana da equipe'}
-                <span className="heading-dot">.</span>
               </h1>
               <p>
                 {view === 'members' && coordinator
                   ? 'As pessoas que fazem as entregas acontecerem.'
                   : view === 'meeting'
                     ? 'Conecte as entregas da última semana aos próximos passos.'
-                    : 'Prioridades claras. Entregas em movimento.'}
+                    : view === 'mine'
+                      ? 'As atividades sob sua responsabilidade nesta semana.'
+                      : 'Tudo que a equipe está fazendo nesta semana.'}
               </p>
             </div>
             {coordinator && view !== 'members' && (
@@ -415,7 +460,7 @@ function App({
               >
                 <ChevronLeft size={17} />
               </button>
-              <CalendarDays size={17} />
+              <CalendarDays size={16} />
               <strong>Semana de {display(week)}</strong>
               <button
                 aria-label="Próxima semana"
@@ -424,26 +469,11 @@ function App({
                 <ChevronRight size={17} />
               </button>
             </div>
-            <button className="text-button" onClick={() => setWeek(sunday())}>
-              Semana atual
-            </button>
-            <div className="demo-switch">
-              <span>{actor.name}</span>
-              <button
-                className="secondary"
-                onClick={() =>
-                  void switchProfile().catch((e) => setError(e.message))
-                }
-              >
-                Trocar perfil
+            {week !== sunday() && (
+              <button className="text-button" onClick={() => setWeek(sunday())}>
+                Voltar à semana atual
               </button>
-              <button
-                className="secondary"
-                onClick={() => void logout().catch((e) => setError(e.message))}
-              >
-                Sair
-              </button>
-            </div>
+            )}
           </div>
           {view === 'members' && coordinator ? (
             <Members
@@ -454,36 +484,40 @@ function App({
             />
           ) : (
             <>
-              <div className="stats">
-                {[
+              <div className="stats" onPointerMove={spotlight}>
+                {(
                   [
-                    visible.length,
-                    'Atividades da semana',
-                    LayoutDashboard,
-                    'neutral',
-                  ],
-                  [
-                    visible.filter((t) => t.status === 'progress').length,
-                    'Em andamento',
-                    Clock3,
-                    'blue',
-                  ],
-                  [done, 'Concluídas', CheckCircle2, 'green'],
-                  [blocked, 'Precisam de atenção', CircleAlert, 'orange'],
-                ].map(([n, label, Icon, color]) => {
-                  const I = Icon as typeof Users;
-                  return (
-                    <div className="stat" key={String(label)}>
-                      <div>
-                        <span>{String(label)}</span>
-                        <strong>{String(n).padStart(2, '0')}</strong>
-                      </div>
-                      <span className={`stat-icon ${color}`}>
-                        <I size={21} />
-                      </span>
+                    [
+                      visible.length,
+                      'Atividades da semana',
+                      LayoutDashboard,
+                      'all',
+                    ],
+                    [
+                      visible.filter((t) => t.status === 'progress').length,
+                      'Em andamento',
+                      Clock3,
+                      'progress',
+                    ],
+                    [done, 'Concluídas', CheckCircle2, 'done'],
+                    [blocked, 'Precisam de atenção', CircleAlert, 'blocked'],
+                  ] as [number, string, typeof Users, string][]
+                ).map(([n, label, I, tone]) => (
+                  <div
+                    className={`stat ${tone} ${n > 0 ? 'is-on' : ''}`}
+                    key={label}
+                  >
+                    <span className="stat-icon">
+                      <I size={18} />
+                    </span>
+                    <div>
+                      <span>{label}</span>
+                      <strong>
+                        <Count value={n} />
+                      </strong>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
               {error && (
                 <div role="alert" className="error">
@@ -491,9 +525,21 @@ function App({
                 </div>
               )}
               {loading ? (
-                <div className="loading">Carregando as atividades…</div>
+                <div className="loading" aria-busy="true" role="status">
+                  <span className="sr-only">Carregando as atividades…</span>
+                  <span>
+                    <i />
+                    <i />
+                  </span>
+                  <span>
+                    <i />
+                  </span>
+                  <span>
+                    <i />
+                  </span>
+                </div>
               ) : view === 'meeting' ? (
-                <div className="meeting">
+                <div className={`meeting ${settled ? 'is-settled' : ''}`}>
                   <section>
                     <div className="section-title">
                       <h2>Semana anterior</h2>
@@ -506,9 +552,10 @@ function App({
                       pendentes
                     </p>
                     {previous.length ? (
-                      previous.map(card)
+                      previous.map((t, i) => card(t, i))
                     ) : (
                       <div className="empty">
+                        <Inbox size={22} />
                         Sem atividades registradas nessa semana.
                       </div>
                     )}
@@ -536,7 +583,9 @@ function App({
                             {tasks.filter((t) => t.assignee_id === u.id).length}
                           </span>
                         </div>
-                        {tasks.filter((t) => t.assignee_id === u.id).map(card)}
+                        {tasks
+                          .filter((t) => t.assignee_id === u.id)
+                          .map((t, i) => card(t, i))}
                       </div>
                     ))}
                     {coordinator && (
@@ -608,13 +657,13 @@ function App({
                       ))}
                     </div>
                   )}
-                  <div className="board">
+                  <div className={`board ${settled ? 'is-settled' : ''}`}>
                     {(Object.keys(statuses) as Status[]).map((status) => {
                       const I = icons[status];
                       const group = visible.filter((t) => t.status === status);
                       return (
                         <section
-                          className={`column ${status} ${draggedId ? 'drop-ready' : ''} ${dropTarget === status ? 'drop-target' : ''}`}
+                          className={`column ${status} ${draggedId ? 'drop-ready' : ''} ${dropTarget === status ? 'drop-target' : ''} ${pulse === status ? 'is-pulse' : ''}`}
                           key={status}
                           aria-label={`Coluna ${statuses[status]}`}
                           onDragOver={(e) => {
@@ -651,17 +700,22 @@ function App({
                           {draggedId && (
                             <div className="drop-instruction">
                               {dropTarget === status
-                                ? `Solte para ${status === 'blocked' ? 'informar o bloqueio' : 'mover para ' + statuses[status]}`
-                                : 'Arraste a atividade para esta coluna'}
+                                ? `${keyboardMove ? 'Enter' : 'Solte'} para ${status === 'blocked' ? 'informar o bloqueio' : 'mover para ' + statuses[status]}`
+                                : keyboardMove
+                                  ? 'Setas escolhem a coluna · Escape cancela'
+                                  : 'Arraste a atividade para esta coluna'}
                             </div>
                           )}
                           <div className="column-body">
-                            {group.map(card)}
+                            {group.map((t, i) => card(t, i))}
                             {!group.length && (
                               <div className="empty">
+                                <I size={22} />
                                 {status === 'done'
-                                  ? 'As próximas entregas aparecem aqui.'
-                                  : 'Nenhuma atividade por aqui.'}
+                                  ? 'As entregas concluídas aparecem aqui.'
+                                  : status === 'blocked'
+                                    ? 'Nada travado. Bom sinal.'
+                                    : 'Nenhuma atividade por aqui.'}
                               </div>
                             )}
                             {actor && status === 'progress' && (
@@ -683,8 +737,7 @@ function App({
             </>
           )}
           <footer className="page-footer">
-            <Leaf size={14} />
-            <span>Forest Flow · Espaço de trabalho da TI</span>
+            <span>Forest Flow · Tecnologia da Informação</span>
             <span>Planejamento e acompanhamento semanal</span>
           </footer>
         </div>
@@ -886,6 +939,7 @@ function TaskPanel({
     >
       <div
         className="panel"
+        data-status={isNew ? 'new' : status}
         role="dialog"
         aria-modal="true"
         aria-labelledby="panel-title"
@@ -913,12 +967,12 @@ function TaskPanel({
       >
         <div className="panel-header">
           <div>
-            <span className="eyebrow">
-              {isNew ? 'CRIAÇÃO RÁPIDA' : 'DETALHES DA ATIVIDADE'}
-            </span>
-            <h2 id="panel-title">
-              {isNew ? 'O próximo passo começa aqui.' : 'Acompanhe a entrega.'}
-            </h2>
+            <h2 id="panel-title">{isNew ? 'Nova atividade' : task.title}</h2>
+            <p>
+              {isNew
+                ? 'Entra na semana atual, na coluna Em andamento.'
+                : `${statuses[task.status]} · semana de ${display(task.week)}`}
+            </p>
           </div>
           <button
             className="icon-button"
@@ -1154,6 +1208,7 @@ function TaskPanel({
                     type="button"
                     className="delete-task confirm"
                     disabled={saving}
+                    data-busy={saving || undefined}
                     onClick={async () => {
                       if (submitting.current) return;
                       submitting.current = true;
@@ -1188,7 +1243,12 @@ function TaskPanel({
                   </button>
                 )}
                 {canEdit && (
-                  <button disabled={saving} className="primary" type="submit">
+                  <button
+                    disabled={saving}
+                    data-busy={saving || undefined}
+                    className="primary"
+                    type="submit"
+                  >
                     {saving
                       ? 'Salvando…'
                       : isNew

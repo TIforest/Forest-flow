@@ -2,15 +2,16 @@ import { useRef, useState } from 'react';
 import { Plus, Pencil, Users, CheckCircle2 } from 'lucide-react';
 import type { User } from './types';
 
+// Sugestões que leem bem sobre o fundo petróleo e se distinguem entre si.
 const colors = [
-  '#2869bc',
-  '#b35c27',
-  '#008578',
-  '#7751b5',
-  '#b83869',
-  '#4d7527',
-  '#ad7712',
-  '#436175',
+  '#4f9cf0',
+  '#e07a5f',
+  '#2fb59c',
+  '#8f74d9',
+  '#e85d8a',
+  '#8fbf3f',
+  '#e2a63a',
+  '#5b8fa8',
 ];
 type Draft = Pick<User, 'name' | 'job' | 'role' | 'color'> & {
   registration_email: string;
@@ -86,7 +87,7 @@ export function Members({
     <section className="members-area">
       <div className="members-heading">
         <div>
-          <h2>Integrantes do TI</h2>
+          <h2>Integrantes da TI</h2>
           <p>
             {users.length} integrantes ·{' '}
             {users.filter((u) => u.role === 'coordinator').length} na
@@ -212,7 +213,11 @@ export function Members({
             >
               Cancelar
             </button>
-            <button className="primary" disabled={busy}>
+            <button
+              className="primary"
+              disabled={busy}
+              data-busy={busy || undefined}
+            >
               {busy
                 ? 'Salvando…'
                 : selected === 'new'
@@ -224,11 +229,7 @@ export function Members({
       )}
       <div className="member-list">
         {users.map((user) => (
-          <article
-            className="member-record"
-            key={user.id}
-            style={{ borderLeftColor: user.color }}
-          >
+          <article className="member-record" key={user.id}>
             <span
               className="member-record-avatar"
               style={{ background: user.color }}
