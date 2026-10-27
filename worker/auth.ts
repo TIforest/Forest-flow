@@ -5,6 +5,14 @@ export interface AuthEnv {
   LOCAL_DEMO?: string;
 }
 const fields = 'users.id, users.name, users.role, users.job, users.color';
+// Limite absoluto da sessão e limite de inatividade (qualquer chamada renova).
+const SESSION_MS = 8 * 3600000;
+const IDLE_MS = 10 * 60000;
+type SessionRow = {
+  token_hash: string;
+  profile_id: string | null;
+  last_seen_at: number;
+};
 export const local = (request: Request) =>
   ['127.0.0.1', 'localhost'].includes(new URL(request.url).hostname);
 const hex = (data: ArrayBuffer) =>
@@ -56,17 +64,47 @@ const reply = (
     status,
     headers: { 'Cache-Control': 'no-store', ...headers },
   });
+// Sessão viva: dentro do prazo absoluto e usada nos últimos IDLE_MS.
+// Sessões paradas são removidas; o uso recente é registrado a cada 30 s.
+async function liveSession(
+  request: Request,
+  env: AuthEnv,
+): Promise<SessionRow | null> {
+  const value = cookieValue(request);
+  if (!value) return null;
+  const hash = await digest(value);
+  const now = Date.now();
+  const row = await env.DB.prepare(
+    'SELECT token_hash,profile_id,last_seen_at FROM team_sessions WHERE token_hash=? AND expires_at>?',
+  )
+    .bind(hash, now)
+    .first<SessionRow>();
+  if (!row) return null;
+  if (row.last_seen_at < now - IDLE_MS) {
+    await env.DB.prepare('DELETE FROM team_sessions WHERE token_hash=?')
+      .bind(hash)
+      .run();
+    return null;
+  }
+  if (row.last_seen_at < now - 30000)
+    await env.DB.prepare(
+      'UPDATE team_sessions SET last_seen_at=? WHERE token_hash=?',
+    )
+      .bind(now, hash)
+      .run();
+  return row;
+}
 export async function getActor(
   request: Request,
   env: AuthEnv,
 ): Promise<User | null> {
-  const session = cookieValue(request);
-  if (session)
-    return env.DB.prepare(
-      `SELECT ${fields} FROM users JOIN team_sessions ON team_sessions.profile_id=users.id WHERE token_hash=? AND expires_at>?`,
-    )
-      .bind(await digest(session), Date.now())
+  if (cookieValue(request)) {
+    const session = await liveSession(request, env);
+    if (!session?.profile_id) return null;
+    return env.DB.prepare(`SELECT ${fields} FROM users WHERE id=?`)
+      .bind(session.profile_id)
       .first<User>();
+  }
   if (local(request) && env.LOCAL_DEMO === 'true')
     return env.DB.prepare(`SELECT ${fields} FROM users WHERE id=?`)
       .bind(request.headers.get('X-Demo-User') || '')
@@ -75,24 +113,30 @@ export async function getActor(
 }
 async function sessionResponse(request: Request, env: AuthEnv) {
   const value = token();
-  await env.DB.prepare(
-    'INSERT INTO team_sessions(token_hash,expires_at) VALUES (?,?)',
-  )
-    .bind(await digest(value), Date.now() + 8 * 3600000)
-    .run();
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare(
+      'DELETE FROM team_sessions WHERE expires_at<? OR last_seen_at<?',
+    ).bind(now, now - IDLE_MS),
+    env.DB.prepare(
+      'INSERT INTO team_sessions(token_hash,expires_at,last_seen_at) VALUES (?,?,?)',
+    ).bind(await digest(value), now + SESSION_MS, now),
+  ]);
   return reply({ authenticated: true, user: null }, 200, {
-    'Set-Cookie': cookie(request, value, 8 * 3600),
+    'Set-Cookie': cookie(request, value, SESSION_MS / 1000),
   });
 }
-async function teamSession(request: Request, env: AuthEnv) {
-  const value = cookieValue(request);
-  if (!value) return null;
-  return env.DB.prepare(
-    'SELECT token_hash,profile_id FROM team_sessions WHERE token_hash=? AND expires_at>?',
-  )
-    .bind(await digest(value), Date.now())
-    .first<{ token_hash: string; profile_id: string | null }>();
-}
+const teamSession = liveSession;
+const expired = (request: Request) =>
+  cookieValue(request)
+    ? reply(
+        {
+          error: 'Sua sessão foi encerrada por inatividade. Entre de novo.',
+          reason: 'expired',
+        },
+        401,
+      )
+    : reply({ error: 'Entre para continuar.' }, 401);
 export async function authRoute(
   request: Request,
   env: AuthEnv,
@@ -111,11 +155,10 @@ export async function authRoute(
     const session = await teamSession(request, env);
     return session
       ? reply({ authenticated: true, user: await getActor(request, env) })
-      : reply({ error: 'Entre para continuar.' }, 401);
+      : expired(request);
   }
   if (path === '/api/auth/profiles' && request.method === 'GET') {
-    if (!(await teamSession(request, env)))
-      return reply({ error: 'Entre para continuar.' }, 401);
+    if (!(await teamSession(request, env))) return expired(request);
     const profiles = await env.DB.prepare(
       'SELECT ' + fields + ' FROM users ORDER BY name',
     ).all();
@@ -123,7 +166,7 @@ export async function authRoute(
   }
   if (path === '/api/auth/profile' && request.method === 'POST') {
     const session = await teamSession(request, env);
-    if (!session) return reply({ error: 'Entre para continuar.' }, 401);
+    if (!session) return expired(request);
     const body = (await request.json()) as { profileId?: unknown };
     const user =
       typeof body.profileId === 'string'
@@ -138,14 +181,17 @@ export async function authRoute(
       env.DB.prepare('DELETE FROM team_sessions WHERE token_hash=?').bind(
         session.token_hash,
       ),
-      env.DB.prepare('INSERT INTO team_sessions VALUES (?,?,?)').bind(
+      env.DB.prepare(
+        'INSERT INTO team_sessions(token_hash,profile_id,expires_at,last_seen_at) VALUES (?,?,?,?)',
+      ).bind(
         await digest(value),
         user?.id || null,
-        Date.now() + 8 * 3600000,
+        Date.now() + SESSION_MS,
+        Date.now(),
       ),
     ]);
     return reply({ authenticated: true, user }, 200, {
-      'Set-Cookie': cookie(request, value, 8 * 3600),
+      'Set-Cookie': cookie(request, value, SESSION_MS / 1000),
     });
   }
   if (path === '/api/auth/logout' && request.method === 'POST') {

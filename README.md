@@ -23,7 +23,7 @@ npm.cmd run account:setup
 
 O comando solicita senha e confirmação sem exibi-las (8 a 128 caracteres), grava somente salt e hash PBKDF2-SHA256 e encerra as sessões existentes. Não use a senha do Microsoft 365; defina uma senha própria para o Forest Flow. Para desenvolvimento local, use `npm.cmd run account:setup:local` após aplicar as migrações.
 
-Os perfis, tarefas e contas individuais históricas são preservados. As contas e sessões antigas não autenticam mais. As sessões da equipe duram 8 horas, usam cookies HttpOnly/SameSite=Strict/Secure em produção, exigem escolha de perfil no servidor e renovam seu token na troca de perfil. Não existe cadastro público da senha compartilhada.
+Os perfis, tarefas e contas individuais históricas são preservados. As contas e sessões antigas não autenticam mais. As sessões da equipe duram no máximo 8 horas e são encerradas pelo servidor após 10 minutos sem nenhuma chamada (qualquer uso renova o prazo); fechar a aba também exige novo login, porque a interface só reaproveita a sessão dentro da mesma aba. Os cookies são HttpOnly/SameSite=Strict/Secure em produção, a escolha de perfil é exigida no servidor e o token é renovado na troca de perfil. Não existe cadastro público da senha compartilhada.
 
 ## Fluxos implementados
 

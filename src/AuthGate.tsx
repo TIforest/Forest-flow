@@ -3,6 +3,26 @@ import type { User } from './types';
 import { Brand } from './Brand';
 import { tilt, untilt, useAmbientPause } from './motion';
 type Session = { authenticated?: boolean; user?: User | null; error?: string };
+// A sessão só é reaproveitada dentro da mesma aba: fechar a aba exige novo login.
+const TAB_KEY = 'forest-flow-tab';
+const IDLE_MS = 10 * 60000;
+const IDLE_NOTICE =
+  'Você foi desconectado após 10 minutos sem atividade. Entre de novo para continuar.';
+function tabOpen() {
+  try {
+    return sessionStorage.getItem(TAB_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function markTab(open: boolean) {
+  try {
+    if (open) sessionStorage.setItem(TAB_KEY, '1');
+    else sessionStorage.removeItem(TAB_KEY);
+  } catch {
+    /* armazenamento indisponível: a sessão não será reaproveitada */
+  }
+}
 export function AuthGate({
   children,
 }: {
@@ -20,6 +40,7 @@ export function AuthGate({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   useAmbientPause();
   async function applySession(session: Session) {
     setAuthenticated(!!session.authenticated);
@@ -36,18 +57,57 @@ export function AuthGate({
     }
   }
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then((r) => r.json() as Promise<Session>)
-      .then(applySession)
-      .catch(() => setError('Não foi possível conectar ao servidor.'))
-      .finally(() => setLoading(false));
+    if (tabOpen())
+      fetch('/api/auth/me')
+        .then((r) => r.json() as Promise<Session>)
+        .then((session) => {
+          if (session.authenticated) return applySession(session);
+          markTab(false);
+          if ((session as { reason?: string }).reason === 'expired')
+            setNotice(IDLE_NOTICE);
+        })
+        .catch(() => setError('Não foi possível conectar ao servidor.'))
+        .finally(() => setLoading(false));
+    else setLoading(false);
     const expired = () => {
+      markTab(false);
       setUser(null);
       setAuthenticated(false);
+      setNotice('Sua sessão foi encerrada. Entre de novo para continuar.');
     };
     addEventListener('forest-session-expired', expired);
     return () => removeEventListener('forest-session-expired', expired);
   }, []);
+  // Sem atividade por 10 minutos, encerra a sessão e volta ao login com aviso.
+  useEffect(() => {
+    if (!authenticated) return;
+    let last = Date.now();
+    const touch = () => {
+      last = Date.now();
+    };
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+    for (const name of events) addEventListener(name, touch, { passive: true });
+    const check = () => {
+      if (Date.now() - last < IDLE_MS) return;
+      clearInterval(timer);
+      void post('logout').catch(() => undefined);
+      markTab(false);
+      setUser(null);
+      setAuthenticated(false);
+      setError('');
+      setNotice(IDLE_NOTICE);
+    };
+    const timer = setInterval(check, 15000);
+    const onVisible = () => {
+      if (!document.hidden) check();
+    };
+    addEventListener('visibilitychange', onVisible);
+    return () => {
+      for (const name of events) removeEventListener(name, touch);
+      removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+    };
+  }, [authenticated]);
   async function post(path: string, body: unknown = {}) {
     const response = await fetch('/api/auth/' + path, {
       method: 'POST',
@@ -61,9 +121,11 @@ export function AuthGate({
   }
   async function logout() {
     await post('logout');
+    markTab(false);
     setUser(null);
     setAuthenticated(false);
     setError('');
+    setNotice('');
   }
   async function switchProfile() {
     await applySession(await post('profile', { profileId: null }));
@@ -86,6 +148,8 @@ export function AuthGate({
     setError('');
     try {
       await applySession(await post('login', { email, password }));
+      markTab(true);
+      setNotice('');
       setPassword('');
     } catch (e) {
       setError((e as Error).message);
@@ -126,6 +190,11 @@ export function AuthGate({
             ? 'Selecione seu perfil para acompanhar suas atividades.'
             : 'Entre com a senha compartilhada da equipe.'}
         </p>
+        {notice && !authenticated && (
+          <div className="auth-notice" role="status">
+            {notice}
+          </div>
+        )}
         {error && (
           <div className="error" role="alert">
             {error}
