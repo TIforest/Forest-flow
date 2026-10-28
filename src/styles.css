@@ -53,6 +53,7 @@
   /* Cursor da marca (public/cursor); ponta da seta em 5,0 na escala 1x. */
   --cursor-arrow: url('/cursor/arrow-32.png') 5 0;
   --cursor-pointer: url('/cursor/arrow-32.png') 5 0;
+  --cursor-text: url('/cursor/text-32.png') 16 16;
   font-family: var(--font);
   font-size: 16px;
   font-synthesis: none;
@@ -76,14 +77,28 @@
       )
       5 0;
     --cursor-pointer: var(--cursor-arrow);
+    --cursor-text: -webkit-image-set(
+        url('/cursor/text-32.png') 1x,
+        url('/cursor/text-64.png') 2x
+      )
+      16 16;
   }
 }
 html {
   cursor: var(--cursor-arrow), auto;
 }
+/* O estilo padrão do navegador força label/select/a de volta ao cursor do sistema. */
+label {
+  cursor: inherit;
+}
+a,
+select,
+summary {
+  cursor: var(--cursor-pointer), pointer;
+}
 input:not([type='checkbox']):not([type='color']),
 textarea {
-  cursor: text;
+  cursor: var(--cursor-text), text;
 }
 * {
   box-sizing: border-box;
