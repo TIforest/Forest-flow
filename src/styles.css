@@ -50,6 +50,9 @@
   --t-slow: 600ms;
   --stagger: 50ms;
   --font: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  /* Cursor da marca (public/cursor); ponta da seta em 5,0 na escala 1x. */
+  --cursor-arrow: url('/cursor/arrow-32.png') 5 0;
+  --cursor-pointer: url('/cursor/arrow-32.png') 5 0;
   font-family: var(--font);
   font-size: 16px;
   font-synthesis: none;
@@ -57,6 +60,30 @@
   color: var(--text);
   background: var(--ink-0);
   -webkit-font-smoothing: antialiased;
+}
+@supports (
+  cursor: -webkit-image-set(
+      url('/cursor/arrow-32.png') 1x,
+      url('/cursor/arrow-64.png') 2x
+    )
+    5 0,
+  auto
+) {
+  :root {
+    --cursor-arrow: -webkit-image-set(
+        url('/cursor/arrow-32.png') 1x,
+        url('/cursor/arrow-64.png') 2x
+      )
+      5 0;
+    --cursor-pointer: var(--cursor-arrow);
+  }
+}
+html {
+  cursor: var(--cursor-arrow), auto;
+}
+input:not([type='checkbox']):not([type='color']),
+textarea {
+  cursor: text;
 }
 * {
   box-sizing: border-box;
@@ -104,7 +131,7 @@ textarea {
   -webkit-tap-highlight-color: transparent;
 }
 button {
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
   border: 0;
   background: none;
   padding: 0;
@@ -386,11 +413,11 @@ input[type='checkbox'] {
   width: 18px;
   height: 18px;
   flex: none;
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 input[type='date']::-webkit-calendar-picker-indicator {
   opacity: 0.7;
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 .field-row {
   display: grid;
@@ -831,7 +858,7 @@ h2 {
   outline: 0;
   color: var(--text);
   max-width: 190px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 .filter select option {
   background: var(--ink-1);
@@ -1293,7 +1320,7 @@ h2 {
   gap: 10px;
   font-size: 13px;
   color: var(--text);
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 
 /* --- Integrantes ----------------------------------------------------------- */
@@ -1438,7 +1465,7 @@ h2 {
   border-radius: var(--r-ctl);
   border: 1px solid var(--line-strong);
   background: rgba(0, 0, 0, 0.22);
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 .color-preview {
   width: 34px;
@@ -1590,7 +1617,7 @@ h2 {
   gap: 12px;
   align-items: flex-start;
   font-weight: 400;
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 .checkbox input {
   margin-top: 2px;
@@ -1707,7 +1734,7 @@ h2 {
   padding: 8px 0;
   font-size: 14px;
   color: var(--text);
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 .task-checklist .checked span {
   text-decoration: line-through;
@@ -1845,7 +1872,7 @@ h2 {
   gap: 10px;
   color: var(--text);
   font-weight: 600;
-  cursor: pointer;
+  cursor: var(--cursor-pointer), pointer;
 }
 .import-fields {
   display: grid;
