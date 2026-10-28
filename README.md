@@ -4,7 +4,7 @@ Planejamento semanal da TI da Forest Paper: React, TypeScript, Tailwind, Cloudfl
 
 ## Aplicação publicada
 
-https://forest-flow.bruno-rech.workers.dev
+https://forest-flow.forestpaper.workers.dev
 
 D1 remoto: `forest-flow`. A configuração está em `deployment/wrangler.jsonc`.
 Os integrantes e as tarefas locais existentes foram copiados para o remoto em 27/10/2026, sem contas/sessões e sem registros temporários de teste. Os dois bancos são independentes; alterações posteriores no ambiente local não sincronizam automaticamente com produção.
