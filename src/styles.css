@@ -54,6 +54,8 @@
   --cursor-arrow: url('/cursor/arrow-32.png') 5 0;
   --cursor-pointer: url('/cursor/hand-32.png') 12 2;
   --cursor-text: url('/cursor/text-32.png') 16 16;
+  --cursor-grab: url('/cursor/grab-32.png') 16 14;
+  --cursor-grabbing: url('/cursor/grabbing-32.png') 16 14;
   font-family: var(--font);
   font-size: 16px;
   font-synthesis: none;
@@ -1023,11 +1025,31 @@ h2 {
   outline: 2px solid var(--lime);
   outline-offset: 2px;
 }
-.task[draggable='true'] {
-  cursor: grab;
+.task.can-move {
+  cursor: var(--cursor-grab), grab;
 }
-.task[draggable='true']:active {
-  cursor: grabbing;
+.task.can-move:active {
+  cursor: var(--cursor-grabbing), grabbing;
+}
+/* Arrasto por ponteiro: o cartão vira um fantasma que segue o mouse. */
+body.is-dragging-task {
+  user-select: none;
+}
+body.is-dragging-task,
+body.is-dragging-task * {
+  cursor: var(--cursor-grabbing), grabbing !important;
+}
+.task-ghost {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  pointer-events: none;
+  opacity: 0.96;
+  border-color: var(--lime-line);
+  box-shadow: var(--shadow-2);
+  transform: rotate(1.5deg) scale(1.03);
+  animation: none;
+  transition: none;
 }
 .task.is-dragging {
   opacity: 0.4;

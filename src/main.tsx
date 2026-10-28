@@ -238,31 +238,132 @@ function App({
       setMoveBusy(false);
     }
   }
+  // Arrasto por ponteiro (mouse/caneta): o cartão vira um fantasma que segue
+  // o cursor e a coluna sob ele é o destino. Mantém o cursor da marca, o que o
+  // arrasto nativo do navegador não permite. Toque usa o painel; teclado, Espaço.
+  type PointerDrag = {
+    task: Task;
+    pointerId: number;
+    source: HTMLElement;
+    startX: number;
+    startY: number;
+    active: boolean;
+    ghost: HTMLElement | null;
+    dx: number;
+    dy: number;
+    target: Status | null;
+  };
+  const drag = useRef<PointerDrag | null>(null);
+  function endPointerDrag(cancel: boolean) {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    d.ghost?.remove();
+    document.body.classList.remove('is-dragging-task');
+    try {
+      d.source.releasePointerCapture(d.pointerId);
+    } catch {
+      /* captura já liberada */
+    }
+    if (!d.active) return;
+    setTimeout(() => {
+      suppressClick.current = false;
+    }, 0);
+    if (cancel || !d.target || d.target === d.task.status) {
+      stopDragging();
+      if (cancel) setNotice('Movimentação cancelada.');
+      return;
+    }
+    void moveTask(d.task, d.target);
+  }
+  const endDrag = useRef(endPointerDrag);
+  endDrag.current = endPointerDrag;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && drag.current?.active) endDrag.current(true);
+    };
+    const onBlur = () => {
+      if (drag.current?.active) endDrag.current(true);
+    };
+    addEventListener('keydown', onKey);
+    addEventListener('blur', onBlur);
+    return () => {
+      removeEventListener('keydown', onKey);
+      removeEventListener('blur', onBlur);
+    };
+  }, []);
   function card(task: Task, index = 0) {
+    const movable = view !== 'meeting' && canMove(task);
     return (
       <button
-        className={`task ${draggedId === task.id ? 'is-dragging' : ''}`}
-        draggable={view !== 'meeting' && canMove(task)}
-        aria-label={`${task.title}${canMove(task) && view !== 'meeting' ? '. Para mover pelo teclado, pressione espaço, escolha a coluna com as setas e confirme com Enter.' : ''}`}
-        onDragStart={(e) => {
-          if (!canMove(task)) {
-            e.preventDefault();
-            return;
+        className={`task ${movable ? 'can-move' : ''} ${draggedId === task.id ? 'is-dragging' : ''}`}
+        aria-label={`${task.title}${movable ? '. Para mover pelo teclado, pressione espaço, escolha a coluna com as setas e confirme com Enter.' : ''}`}
+        onPointerDown={(e) => {
+          if (!movable || e.button !== 0 || e.pointerType === 'touch') return;
+          if (draggedId || drag.current) return;
+          drag.current = {
+            task,
+            pointerId: e.pointerId,
+            source: e.currentTarget,
+            startX: e.clientX,
+            startY: e.clientY,
+            active: false,
+            ghost: null,
+            dx: 0,
+            dy: 0,
+            target: null,
+          };
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            /* sem captura o arrasto segue pelos eventos normais */
           }
-          e.dataTransfer.setData('text/plain', task.id);
-          e.dataTransfer.effectAllowed = 'move';
-          suppressClick.current = true;
-          setDraggedId(task.id);
-          setDropTarget(null);
         }}
-        onDragEnd={() => {
-          stopDragging();
-          setTimeout(() => {
-            suppressClick.current = false;
-          }, 0);
+        onLostPointerCapture={() => {
+          if (drag.current?.active) endPointerDrag(true);
         }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d || d.task.id !== task.id) return;
+          if (!d.active) {
+            if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 6)
+              return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const ghost = e.currentTarget.cloneNode(true) as HTMLElement;
+            ghost.className = 'task task-ghost';
+            ghost.setAttribute('aria-hidden', 'true');
+            ghost.style.width = `${rect.width}px`;
+            document.body.appendChild(ghost);
+            d.ghost = ghost;
+            d.dx = e.clientX - rect.left;
+            d.dy = e.clientY - rect.top;
+            d.active = true;
+            suppressClick.current = true;
+            document.body.classList.add('is-dragging-task');
+            setKeyboardMove(false);
+            setDraggedId(task.id);
+            setDropTarget(null);
+          }
+          d.ghost!.style.left = `${e.clientX - d.dx}px`;
+          d.ghost!.style.top = `${e.clientY - d.dy}px`;
+          const column = document
+            .elementFromPoint(e.clientX, e.clientY)
+            ?.closest('.column');
+          const target =
+            (column &&
+              (Object.keys(statuses) as Status[]).find((s) =>
+                column.classList.contains(s),
+              )) ||
+            null;
+          if (target !== d.target) {
+            d.target = target;
+            setDropTarget(target);
+          }
+        }}
+        onPointerUp={() => endPointerDrag(false)}
+        onPointerCancel={() => endPointerDrag(true)}
         onKeyDown={(e) => {
-          if (!canMove(task) || view === 'meeting') return;
+          if (!movable || drag.current?.active) return;
           const columns = Object.keys(statuses) as Status[];
           if (e.key === ' ' && !draggedId) {
             e.preventDefault();
@@ -666,31 +767,6 @@ function App({
                           className={`column ${status} ${draggedId ? 'drop-ready' : ''} ${dropTarget === status ? 'drop-target' : ''} ${pulse === status ? 'is-pulse' : ''}`}
                           key={status}
                           aria-label={`Coluna ${statuses[status]}`}
-                          onDragOver={(e) => {
-                            if (draggedId && !moveBusy) {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = 'move';
-                              setDropTarget(status);
-                            }
-                          }}
-                          onDragLeave={(e) => {
-                            if (
-                              !e.currentTarget.contains(
-                                e.relatedTarget as Node | null,
-                              )
-                            )
-                              setDropTarget(null);
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            const task = tasks.find(
-                              (t) =>
-                                t.id === draggedId &&
-                                t.id === e.dataTransfer.getData('text/plain'),
-                            );
-                            if (task) void moveTask(task, status);
-                            else stopDragging();
-                          }}
                         >
                           <div className="column-title">
                             <I size={16} />
