@@ -52,7 +52,7 @@
   --font: 'Sora', 'Segoe UI', system-ui, sans-serif;
   /* Cursor da marca (public/cursor); ponta da seta em 5,0 na escala 1x. */
   --cursor-arrow: url('/cursor/arrow-32.png') 5 0;
-  --cursor-pointer: url('/cursor/arrow-32.png') 5 0;
+  --cursor-pointer: url('/cursor/hand-32.png') 12 2;
   --cursor-text: url('/cursor/text-32.png') 16 16;
   font-family: var(--font);
   font-size: 16px;
@@ -62,28 +62,7 @@
   background: var(--ink-0);
   -webkit-font-smoothing: antialiased;
 }
-@supports (
-  cursor: -webkit-image-set(
-      url('/cursor/arrow-32.png') 1x,
-      url('/cursor/arrow-64.png') 2x
-    )
-    5 0,
-  auto
-) {
-  :root {
-    --cursor-arrow: -webkit-image-set(
-        url('/cursor/arrow-32.png') 1x,
-        url('/cursor/arrow-64.png') 2x
-      )
-      5 0;
-    --cursor-pointer: var(--cursor-arrow);
-    --cursor-text: -webkit-image-set(
-        url('/cursor/text-32.png') 1x,
-        url('/cursor/text-64.png') 2x
-      )
-      16 16;
-  }
-}
+/* Só 32 px: o Chrome esconde cursores maiores quando encostam na borda da janela. */
 html {
   cursor: var(--cursor-arrow), auto;
 }
@@ -152,7 +131,7 @@ button {
   padding: 0;
 }
 button:disabled {
-  cursor: not-allowed;
+  cursor: var(--cursor-arrow), default;
 }
 :focus-visible {
   outline: 2px solid var(--lime);
