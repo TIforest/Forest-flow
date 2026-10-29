@@ -1,280 +1,263 @@
+import { OnboardingForm, type AccessRequest } from './OnboardingForm';
 import { useEffect, useState } from 'react';
 import type { User } from './types';
 import { Brand } from './Brand';
-import { tilt, untilt, useAmbientPause } from './motion';
-type Session = { authenticated?: boolean; user?: User | null; error?: string };
-// A sessão só é reaproveitada dentro da mesma aba: fechar a aba exige novo login.
-const TAB_KEY = 'forest-flow-tab';
-const IDLE_MS = 10 * 60000;
-const IDLE_NOTICE =
-  'Você foi desconectado após 10 minutos sem atividade. Entre de novo para continuar.';
-function tabOpen() {
-  try {
-    return sessionStorage.getItem(TAB_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-function markTab(open: boolean) {
-  try {
-    if (open) sessionStorage.setItem(TAB_KEY, '1');
-    else sessionStorage.removeItem(TAB_KEY);
-  } catch {
-    /* armazenamento indisponível: a sessão não será reaproveitada */
-  }
-}
+import { AdminPanel } from './AdminPanel';
+export type Workspace = {
+  id: string;
+  name: string;
+  role: 'member' | 'coordinator';
+  active: number;
+};
+export type CorporateUser = User & {
+  email: string;
+  is_admin: number;
+  onboarding_required: number;
+  access_status: string;
+};
+type Session = {
+  pendingRequests?: number;
+  onboarding?: AccessRequest | null;
+  authenticated?: boolean;
+  user?: CorporateUser;
+  workspaces?: Workspace[];
+  error?: string;
+};
 export function AuthGate({
   children,
 }: {
   children: (
-    user: User,
+    user: CorporateUser,
     logout: () => Promise<void>,
-    switchProfile: () => Promise<void>,
+    workspace: Workspace,
   ) => React.ReactNode;
 }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [profiles, setProfiles] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  useAmbientPause();
-  async function applySession(session: Session) {
-    setAuthenticated(!!session.authenticated);
-    setUser(session.user || null);
-    if (session.authenticated && !session.user) {
-      const response = await fetch('/api/auth/profiles');
-      const data = (await response.json()) as {
-        profiles: User[];
-        error?: string;
-      };
-      if (!response.ok)
-        throw new Error(data.error || 'Não foi possível carregar os perfis.');
-      setProfiles(data.profiles);
-    }
+  const [session, setSession] = useState<Session>({}),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(''),
+    [selected, setSelected] = useState(''),
+    [admin, setAdmin] = useState(false);
+  async function load() {
+    const r = await fetch('/api/auth/me');
+    const data = (await r.json()) as Session;
+    if (r.ok) {
+      setSession(data);
+      setSelected((id) =>
+        data.workspaces?.some((w) => w.id === id)
+          ? id
+          : data.workspaces?.[0]?.id || '',
+      );
+    } else if (r.status === 401) setSession({});
+    else throw new Error(data.error || 'Falha ao carregar seu acesso.');
+  }
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setSession({});
+    setAdmin(false);
+    setSelected('');
   }
   useEffect(() => {
-    if (tabOpen())
-      fetch('/api/auth/me')
-        .then((r) => r.json() as Promise<Session>)
-        .then((session) => {
-          if (session.authenticated) return applySession(session);
-          markTab(false);
-          if ((session as { reason?: string }).reason === 'expired')
-            setNotice(IDLE_NOTICE);
-        })
-        .catch(() => setError('Não foi possível conectar ao servidor.'))
-        .finally(() => setLoading(false));
-    else setLoading(false);
+    const query = new URLSearchParams(location.search);
+    if (query.get('login') === 'failed') {
+      const messages: Record<string, string> = {
+        session:
+          'A tentativa de login expirou ou perdeu o vínculo com este navegador. Clique em Entrar com a Microsoft e conclua o acesso na mesma aba.',
+        authorization:
+          'A Microsoft não autorizou a entrada. Pode ser necessário o consentimento do administrador do Entra ID para este aplicativo.',
+        configuration:
+          'A Microsoft recusou a configuração do aplicativo. O administrador precisa conferir o segredo do cliente e sua validade.',
+        account:
+          'A conta retornada pela Microsoft não atende à política de acesso corporativo da Forest Paper. A identidade será conferida pelo administrador.',
+        server:
+          'Não foi possível concluir a validação do login no servidor. A falha foi registrada para diagnóstico.',
+      };
+      const ref = query.get('ref') || '';
+      setError(
+        (messages[query.get('reason') || ''] ||
+          'Não foi possível concluir o login Microsoft. Tente novamente.') +
+          (/^[0-9a-f-]{36}$/.test(ref) ? ' Referência: ' + ref : ''),
+      );
+    }
+    if (query.has('login')) {
+      query.delete('login');
+      query.delete('reason');
+      query.delete('ref');
+      history.replaceState(
+        null,
+        '',
+        location.pathname + (query.size ? '?' + query : '') + location.hash,
+      );
+    }
+    void load()
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
     const expired = () => {
-      markTab(false);
-      setUser(null);
-      setAuthenticated(false);
-      setNotice('Sua sessão foi encerrada. Entre de novo para continuar.');
+      setSession({});
+      setError('Sua sessão foi encerrada. Entre novamente.');
     };
     addEventListener('forest-session-expired', expired);
     return () => removeEventListener('forest-session-expired', expired);
   }, []);
-  // Sem atividade por 10 minutos, encerra a sessão e volta ao login com aviso.
   useEffect(() => {
-    if (!authenticated) return;
+    if (!session.authenticated) return;
     let last = Date.now();
     const touch = () => {
       last = Date.now();
     };
     const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
-    for (const name of events) addEventListener(name, touch, { passive: true });
-    const check = () => {
-      if (Date.now() - last < IDLE_MS) return;
-      clearInterval(timer);
-      void post('logout').catch(() => undefined);
-      markTab(false);
-      setUser(null);
-      setAuthenticated(false);
-      setError('');
-      setNotice(IDLE_NOTICE);
-    };
-    const timer = setInterval(check, 15000);
-    const onVisible = () => {
-      if (!document.hidden) check();
-    };
-    addEventListener('visibilitychange', onVisible);
+    events.forEach((e) => addEventListener(e, touch, { passive: true }));
+    const timer = setInterval(() => {
+      if (Date.now() - last >= 600000) {
+        void logout();
+        setError('Sessão encerrada após 10 minutos sem atividade.');
+      }
+    }, 15000);
+    // Refresh permissions even when a workspace is open: revoked access must leave the screen.
+    const permissions = setInterval(
+      () => void load().catch(() => undefined),
+      60000,
+    );
     return () => {
-      for (const name of events) removeEventListener(name, touch);
-      removeEventListener('visibilitychange', onVisible);
       clearInterval(timer);
+      clearInterval(permissions);
+      events.forEach((e) => removeEventListener(e, touch));
     };
-  }, [authenticated]);
-  async function post(path: string, body: unknown = {}) {
-    const response = await fetch('/api/auth/' + path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = (await response.json()) as Session;
-    if (!response.ok)
-      throw new Error(data.error || 'Não foi possível concluir.');
-    return data;
-  }
-  async function logout() {
-    await post('logout');
-    markTab(false);
-    setUser(null);
-    setAuthenticated(false);
-    setError('');
-    setNotice('');
-  }
-  async function switchProfile() {
-    await applySession(await post('profile', { profileId: null }));
-  }
-  async function chooseProfile(profileId: string) {
-    setBusy(true);
-    setError('');
-    try {
-      await applySession(await post('profile', { profileId }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await applySession(await post('login', { email, password }));
-      markTab(true);
-      setNotice('');
-      setPassword('');
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  }, [session.authenticated]);
   if (loading)
     return (
       <div className="auth-shell">
-        <p className="auth-status" role="status">
-          Conectando ao Forest Flow…
-        </p>
+        <p role="status">Conectando ao Forest Flow…</p>
       </div>
     );
-  if (user) return children(user, logout, switchProfile);
+  const user = session.user,
+    workspace = session.workspaces?.find((w) => w.id === selected);
+  if (user && user.access_status === 'pending' && !user.is_admin)
+    return (
+      <OnboardingForm
+        key={user.id}
+        user={user}
+        request={session.onboarding || null}
+        onChange={load}
+        logout={logout}
+      />
+    );
+  if (user && user.access_status === 'active')
+    return (
+      <>
+        <div className="corporate-bar">
+          <span>
+            <strong>{user.name}</strong> · {user.email}
+          </span>
+          <label>
+            Setor{' '}
+            <select
+              aria-label="Espaço de trabalho"
+              value={selected}
+              onChange={(e) => {
+                setSelected(e.target.value);
+                setAdmin(false);
+              }}
+            >
+              <option value="" disabled>
+                Sem setor definido
+              </option>
+              {session.workspaces?.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span>
+            {user.is_admin
+              ? 'Administrador'
+              : workspace?.role === 'coordinator'
+                ? 'Coordenador'
+                : 'Membro'}
+          </span>
+          {user.is_admin === 1 && (
+            <button className="secondary" onClick={() => setAdmin(!admin)}>
+              {admin ? 'Voltar ao quadro' : 'Administração'}
+              {!admin &&
+                !!session.pendingRequests &&
+                ` (${session.pendingRequests})`}
+            </button>
+          )}
+          <button className="secondary" onClick={() => void logout()}>
+            Sair
+          </button>
+        </div>
+        {admin && user.is_admin === 1 ? (
+          <AdminPanel onChange={load} />
+        ) : workspace ? (
+          children({ ...user, role: workspace.role }, logout, workspace)
+        ) : (
+          <div className="auth-shell">
+            <div className="auth-card">
+              <h1>Sem setor definido</h1>
+              <p>
+                Seu acesso está liberado, mas você ainda não participa de um
+                espaço de trabalho. Solicite a associação ao administrador.
+              </p>
+              {user.is_admin === 1 && (
+                <button className="primary" onClick={() => setAdmin(true)}>
+                  Gerenciar setores
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </>
+    );
   return (
-    <div className={'auth-shell' + (authenticated ? ' is-lit' : '')}>
+    <div className="auth-shell">
       <div className="ambient" aria-hidden="true">
         <i />
         <i />
       </div>
-      <div className="lamp" aria-hidden="true">
-        <i className="lamp-cord" />
-        <i className="lamp-shade" />
-        <i className="lamp-bulb" />
-        <i className="lamp-glow" />
-      </div>
-      <div className={'auth-card' + (authenticated ? ' profile-card' : '')}>
+      <div className="auth-card">
         <div className="brand">
           <Brand />
         </div>
-        <h1>
-          {authenticated ? 'Quem está usando?' : 'Acesso da equipe de TI'}
-        </h1>
+        <h1>{user ? 'Acesso aguardando liberação' : 'Entre no Forest Flow'}</h1>
         <p>
-          {authenticated
-            ? 'Selecione seu perfil para acompanhar suas atividades.'
-            : 'Entre com a senha compartilhada da equipe.'}
+          {user
+            ? user.access_status === 'blocked'
+              ? 'Seu acesso foi removido ou bloqueado. Entre em contato com o administrador.'
+              : `Olá, ${user.name}. Seu login Microsoft foi confirmado. O administrador precisa liberar seu acesso e associar você a um setor.`
+            : 'Use sua conta corporativa da Forest Paper.'}
         </p>
-        {notice && !authenticated && (
-          <div className="auth-notice" role="status">
-            {notice}
-          </div>
-        )}
         {error && (
           <div className="error" role="alert">
             {error}
           </div>
         )}
-        {authenticated ? (
+        {user ? (
           <>
-            <div className="profile-grid">
-              {profiles.map((profile, index) => (
-                <button
-                  type="button"
-                  className="profile-option"
-                  key={profile.id}
-                  disabled={busy}
-                  style={{ '--i': index } as React.CSSProperties}
-                  onPointerMove={tilt}
-                  onPointerLeave={untilt}
-                  onClick={() => void chooseProfile(profile.id)}
-                >
-                  <span
-                    className="profile-avatar"
-                    style={{ backgroundColor: profile.color }}
-                  >
-                    {profile.name.slice(0, 1)}
-                  </span>
-                  <strong>{profile.name}</strong>
-                  <small>{profile.job}</small>
-                  {profile.role === 'coordinator' && <small>Coordenação</small>}
-                </button>
-              ))}
-            </div>
-            {!profiles.length && (
-              <p>
-                Nenhum perfil cadastrado. Solicite a configuração da equipe.
-              </p>
-            )}
-            <small className="auth-help">
-              O histórico registra o perfil selecionado. Todos com o acesso da
-              equipe podem escolher qualquer perfil.
-            </small>
+            <p>{user.email}</p>
             <button
-              className="auth-link"
-              onClick={() => void logout().catch((e) => setError(e.message))}
+              className="primary"
+              onClick={() => void load().catch((e) => setError(e.message))}
             >
-              Sair da conta da equipe
+              Verificar liberação
+            </button>
+            <button className="auth-link" onClick={() => void logout()}>
+              Sair
             </button>
           </>
         ) : (
-          <form onSubmit={submit}>
-            <label>
-              E-mail da equipe
-              <input
-                type="email"
-                required
-                maxLength={254}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-              />
-            </label>
-            <label>
-              Senha
-              <input
-                type="password"
-                required
-                minLength={8}
-                maxLength={128}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <button
-              className="primary"
-              disabled={busy}
-              data-busy={busy || undefined}
-            >
-              {busy ? 'Entrando…' : 'Entrar'}
-            </button>
-          </form>
+          <a
+            className="primary microsoft-login"
+            href="/api/auth/microsoft/start"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+              <path fill="#f25022" d="M0 0h9v9H0z" />
+              <path fill="#7fba00" d="M11 0h9v9h-9z" />
+              <path fill="#00a4ef" d="M0 11h9v9H0z" />
+              <path fill="#ffb900" d="M11 11h9v9h-9z" />
+            </svg>
+            Entrar com a Microsoft
+          </a>
         )}
       </div>
     </div>

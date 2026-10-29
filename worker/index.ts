@@ -1,5 +1,8 @@
+import { DELETED_USER_ID } from '../src/types';
+import { onboardingRoute } from './onboarding';
 import type { User, Task, Status } from '../src/types';
-import { authRoute, getActor, inviteUser, type AuthEnv } from './auth';
+import { authRoute, getActor, getAccount, type AuthEnv } from './auth';
+import { adminRoute } from './admin';
 import { importRoute, type ImportEnv } from './imports';
 interface Env extends AuthEnv, ImportEnv {}
 const json = (data: unknown, status = 200) =>
@@ -13,6 +16,44 @@ function validDate(value: unknown): value is string {
     parsed.toISOString().slice(0, 10) === value
   );
 }
+// The primary assignee stays in tasks.assignee_id; extra members live in task_assignees.
+const taskColumns =
+  'tasks.*, (SELECT group_concat(user_id) FROM task_assignees WHERE task_id=tasks.id) AS extra_assignees';
+function hydrate(row: Task & { extra_assignees?: string | null }): Task {
+  const { extra_assignees, ...task } = row;
+  return {
+    ...task,
+    assignee_ids: [
+      task.assignee_id,
+      ...(extra_assignees || '')
+        .split(',')
+        .filter((id) => id && id !== task.assignee_id),
+    ],
+  };
+}
+function parseAssignees(ids: unknown, single: unknown): string[] | null {
+  const list = ids === undefined ? [single] : ids;
+  if (
+    !Array.isArray(list) ||
+    !list.length ||
+    list.length > 20 ||
+    list.some((id) => typeof id !== 'string' || !id)
+  )
+    return null;
+  return [...new Set(list as string[])];
+}
+async function usersExist(db: D1Database, ids: string[], workspace: string) {
+  if (!ids.length) return true;
+  const row = await db
+    .prepare(
+      `SELECT count(*) AS n FROM users u JOIN workspace_memberships m ON m.user_id=u.id WHERE m.workspace_id=? AND u.access_status!='merged' AND u.id IN (${ids.map(() => '?').join(',')})`,
+    )
+    .bind(workspace, ...ids)
+    .first<{ n: number }>();
+  return row?.n === ids.length;
+}
+const sameSet = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((id) => b.includes(id));
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -24,159 +65,67 @@ export default {
     )
       return json({ error: 'Origem inválida.' }, 403);
     try {
+      const onboarding = await onboardingRoute(request, env);
+      if (onboarding) return onboarding;
       const auth = await authRoute(request, env);
       if (auth) return auth;
+      const admin = await adminRoute(request, env);
+      if (admin) return admin;
+      const account = await getAccount(request, env);
+      if (!account)
+        return json(
+          { error: 'Sua sessão foi encerrada. Entre novamente.' },
+          401,
+        );
       const actor = await getActor(request, env);
-      if (!actor) return json({ error: 'Entre para continuar.' }, 401);
+      if (!actor)
+        return json(
+          {
+            error:
+              'Acesso ao setor não autorizado. Atualize seus espaços de trabalho.',
+          },
+          403,
+        );
       const imported = await importRoute(request, env, actor);
       if (imported) return imported;
+      const isAssignee = (task: Task) => task.assignee_ids.includes(actor.id);
       const canSee = (task: Task) =>
-        !task.restricted ||
-        actor.role === 'coordinator' ||
-        task.assignee_id === actor.id;
+        !task.restricted || actor.role === 'coordinator' || isAssignee(task);
       if (url.pathname === '/api/users' && request.method === 'GET') {
         return json(
-          (await env.DB.prepare('SELECT * FROM users ORDER BY name').all())
-            .results,
+          (
+            await env.DB.prepare(
+              "SELECT u.id,u.name,u.job,u.color,u.registration_email,m.role FROM users u JOIN workspace_memberships m ON m.user_id=u.id WHERE m.workspace_id=? AND u.access_status!='merged' ORDER BY u.name",
+            )
+              .bind(actor.workspace_id)
+              .all()
+          ).results,
         );
       }
-      const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
-      const invitation = url.pathname.match(/^\/api\/users\/([^/]+)\/invite$/);
-      if (invitation && request.method === 'POST')
-        return inviteUser(request, env, actor, invitation[1]);
-      if (
-        (url.pathname === '/api/users' && request.method === 'POST') ||
-        (userMatch && request.method === 'PATCH')
-      ) {
-        if (actor.role !== 'coordinator')
-          return json(
-            { error: 'Somente a coordenação pode gerenciar integrantes.' },
-            403,
-          );
-        const b = (await request.json()) as Record<string, unknown>;
-        if (
-          !b ||
-          typeof b.name !== 'string' ||
-          !b.name.trim() ||
-          b.name.length > 100 ||
-          typeof b.job !== 'string' ||
-          !b.job.trim() ||
-          b.job.length > 120 ||
-          !['coordinator', 'member'].includes(String(b.role)) ||
-          typeof b.color !== 'string' ||
-          !/^#[0-9a-fA-F]{6}$/.test(b.color)
-        )
-          return json(
-            { error: 'Informe nome, cargo, perfil e uma cor válida.' },
-            400,
-          );
-        const id = userMatch?.[1] || crypto.randomUUID();
-        const current = userMatch
-          ? await env.DB.prepare(
-              'SELECT registration_email FROM users WHERE id=?',
-            )
-              .bind(id)
-              .first<{ registration_email: string | null }>()
-          : null;
-        const registrationEmail =
-          b.registration_email === undefined
-            ? current?.registration_email || null
-            : typeof b.registration_email === 'string'
-              ? b.registration_email.trim().toLowerCase() || null
-              : null;
-        if (
-          registrationEmail &&
-          (!/^[^\s@]+@forest\.ind\.br$/.test(registrationEmail) ||
-            registrationEmail.length > 254)
-        )
-          return json(
-            { error: 'Informe um e-mail corporativo @forest.ind.br.' },
-            400,
-          );
-        const existingAccount = await env.DB.prepare(
-          'SELECT email FROM accounts WHERE user_id=?',
-        )
-          .bind(id)
-          .first<{ email: string }>();
-        if (existingAccount && registrationEmail !== existingAccount.email)
-          return json(
-            {
-              error:
-                'O e-mail deste acesso já foi confirmado e não pode ser alterado aqui.',
-            },
-            409,
-          );
-        if (
-          registrationEmail &&
-          (await env.DB.prepare(
-            'SELECT id FROM users WHERE registration_email=? AND id!=?',
-          )
-            .bind(registrationEmail, id)
-            .first())
-        )
-          return json(
-            { error: 'Este e-mail já está vinculado a outro integrante.' },
-            409,
-          );
-        if (userMatch) {
-          if (id === actor.id && b.role !== 'coordinator')
-            return json(
-              {
-                error:
-                  'Você não pode remover seu próprio perfil de coordenador.',
-              },
-              409,
-            );
-          const result = await env.DB.prepare(
-            'UPDATE users SET name = ?, job = ?, role = ?, color = ?, registration_email=? WHERE id = ?',
-          )
-            .bind(
-              b.name.trim(),
-              b.job.trim(),
-              b.role,
-              b.color.toLowerCase(),
-              registrationEmail,
-              id,
-            )
-            .run();
-          if (!result.meta.changes)
-            return json({ error: 'Integrante não encontrado.' }, 404);
-        } else {
-          await env.DB.prepare(
-            'INSERT INTO users (id,name,job,role,color,registration_email) VALUES (?,?,?,?,?,?)',
-          )
-            .bind(
-              id,
-              b.name.trim(),
-              b.job.trim(),
-              b.role,
-              b.color.toLowerCase(),
-              registrationEmail,
-            )
-            .run();
-        }
+      if (url.pathname.startsWith('/api/users') && request.method !== 'GET')
         return json(
-          await env.DB.prepare('SELECT * FROM users WHERE id = ?')
-            .bind(id)
-            .first(),
-          userMatch ? 200 : 201,
+          { error: 'Gerencie os acessos pelo painel de administrador.' },
+          403,
         );
-      }
       if (url.pathname === '/api/tasks' && request.method === 'GET') {
         if (!validDate(url.searchParams.get('week')))
           return json({ error: 'Semana inválida.' }, 400);
         const tasks = await env.DB.prepare(
-          'SELECT tasks.* FROM tasks JOIN task_weeks ON task_weeks.task_id=tasks.id WHERE task_weeks.week = ? AND deleted_at IS NULL ORDER BY created_at DESC',
+          `SELECT ${taskColumns} FROM tasks JOIN task_weeks ON task_weeks.task_id=tasks.id WHERE tasks.workspace_id=? AND task_weeks.week = ? AND deleted_at IS NULL ORDER BY created_at DESC`,
         )
-          .bind(url.searchParams.get('week'))
+          .bind(actor.workspace_id, url.searchParams.get('week'))
           .all<Task>();
-        return json(tasks.results.filter(canSee));
+        return json(tasks.results.map(hydrate).filter(canSee));
       }
       if (url.pathname === '/api/tasks' && request.method === 'POST') {
         const b = (await request.json()) as Record<string, unknown>;
         if (!b || typeof b !== 'object')
           return json({ error: 'Dados inválidos.' }, 400);
-        if (actor.role !== 'coordinator' && b.assignee_id !== actor.id)
+        const assignees = parseAssignees(b.assignee_ids, b.assignee_id);
+        if (
+          actor.role !== 'coordinator' &&
+          (assignees?.length !== 1 || assignees[0] !== actor.id)
+        )
           return json(
             { error: 'Você pode criar atividades apenas para si mesmo.' },
             403,
@@ -185,7 +134,7 @@ export default {
           typeof b.title !== 'string' ||
           !b.title.trim() ||
           b.title.length > 180 ||
-          typeof b.assignee_id !== 'string' ||
+          !assignees ||
           !validDate(b.week) ||
           (b.due_date && !validDate(b.due_date)) ||
           !['normal', 'high'].includes(String(b.priority)) ||
@@ -194,26 +143,23 @@ export default {
           typeof b.restricted !== 'boolean'
         )
           return json({ error: 'Confira os campos da atividade.' }, 400);
-        if (
-          !(await env.DB.prepare('SELECT id FROM users WHERE id = ?')
-            .bind(b.assignee_id)
-            .first())
-        )
+        if (!(await usersExist(env.DB, assignees, actor.workspace_id)))
           return json({ error: 'Responsável inválido.' }, 400);
         const id = crypto.randomUUID();
         await env.DB.batch([
           env.DB.prepare(
-            'INSERT INTO tasks (id,title,description,assignee_id,created_by,week,due_date,priority,restricted) VALUES (?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO tasks (id,title,description,assignee_id,created_by,week,due_date,priority,restricted,workspace_id) VALUES (?,?,?,?,?,?,?,?,?,?)',
           ).bind(
             id,
             b.title.trim(),
             b.description,
-            b.assignee_id,
+            assignees[0],
             actor.id,
             b.week,
             b.due_date || null,
             b.priority,
             b.restricted ? 1 : 0,
+            actor.workspace_id,
           ),
           env.DB.prepare(
             'INSERT INTO events (id,task_id,actor_id,message) VALUES (?,?,?,?)',
@@ -221,6 +167,13 @@ export default {
           env.DB.prepare(
             'INSERT INTO task_weeks(task_id,week,added_by) VALUES (?,?,?)',
           ).bind(id, b.week, actor.id),
+          ...assignees
+            .slice(1)
+            .map((userId) =>
+              env.DB.prepare(
+                'INSERT INTO task_assignees(task_id,user_id) VALUES (?,?)',
+              ).bind(id, userId),
+            ),
         ]);
         return json({ id }, 201);
       }
@@ -251,9 +204,9 @@ export default {
         const statements: D1PreparedStatement[] = [];
         for (const id of unique) {
           const t = await env.DB.prepare(
-            'SELECT * FROM tasks WHERE id=? AND deleted_at IS NULL',
+            'SELECT * FROM tasks WHERE id=? AND workspace_id=? AND deleted_at IS NULL',
           )
-            .bind(id)
+            .bind(id, actor.workspace_id)
             .first<Task>();
           if (!t || t.status === 'done' || b.week <= t.week)
             return json(
@@ -288,17 +241,19 @@ export default {
         /^\/api\/tasks\/([^/]+)(\/events|\/comments|\/checklist)?$/,
       );
       if (match) {
-        const task = await env.DB.prepare(
-          'SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL',
+        const row = await env.DB.prepare(
+          `SELECT ${taskColumns} FROM tasks WHERE id = ? AND workspace_id=? AND deleted_at IS NULL`,
         )
-          .bind(match[1])
+          .bind(match[1], actor.workspace_id)
           .first<Task>();
+        const task = row && hydrate(row);
         if (!task || !canSee(task))
           return json({ error: 'Atividade não encontrada.' }, 404);
         if (!match[2] && request.method === 'DELETE') {
           if (
             actor.role !== 'coordinator' &&
-            (task.created_by !== actor.id || task.assignee_id !== actor.id)
+            (task.created_by !== actor.id ||
+              !sameSet(task.assignee_ids, [actor.id]))
           )
             return json(
               {
@@ -329,7 +284,7 @@ export default {
           ) as { id: string; text: string; done: boolean }[];
           if (request.method === 'GET') return json(items);
           if (request.method === 'PATCH') {
-            if (actor.role !== 'coordinator' && task.assignee_id !== actor.id)
+            if (actor.role !== 'coordinator' && !isAssignee(task))
               return json(
                 {
                   error:
@@ -405,7 +360,7 @@ export default {
             ).results,
           );
         if (!match[2] && request.method === 'PATCH') {
-          if (actor.role !== 'coordinator' && task.assignee_id !== actor.id)
+          if (actor.role !== 'coordinator' && !isAssignee(task))
             return json(
               { error: 'Você só pode atualizar suas atividades.' },
               403,
@@ -416,7 +371,8 @@ export default {
             details?: {
               title: string;
               description: string;
-              assignee_id: string;
+              assignee_id?: string;
+              assignee_ids?: string[];
               due_date: string;
               priority: string;
               restricted: boolean;
@@ -438,6 +394,9 @@ export default {
               400,
             );
           const d = b.details;
+          const nextAssignees = d
+            ? parseAssignees(d.assignee_ids, d.assignee_id)
+            : null;
           if (d) {
             if (actor.role !== 'coordinator' && task.created_by !== actor.id)
               return json(
@@ -453,7 +412,7 @@ export default {
               d.title.length > 180 ||
               typeof d.description !== 'string' ||
               d.description.length > 5000 ||
-              typeof d.assignee_id !== 'string' ||
+              !nextAssignees ||
               typeof d.due_date !== 'string' ||
               (d.due_date && !validDate(d.due_date)) ||
               !['normal', 'high'].includes(d.priority) ||
@@ -462,7 +421,7 @@ export default {
               return json({ error: 'Confira os detalhes da atividade.' }, 400);
             if (
               actor.role !== 'coordinator' &&
-              (d.assignee_id !== task.assignee_id ||
+              (!sameSet(nextAssignees, task.assignee_ids) ||
                 d.priority !== task.priority ||
                 d.due_date !== (task.due_date || '') ||
                 Number(d.restricted) !== task.restricted)
@@ -475,9 +434,13 @@ export default {
                 403,
               );
             if (
-              !(await env.DB.prepare('SELECT id FROM users WHERE id=?')
-                .bind(d.assignee_id)
-                .first())
+              (nextAssignees.includes(DELETED_USER_ID) &&
+                !task.assignee_ids.includes(DELETED_USER_ID)) ||
+              !(await usersExist(
+                env.DB,
+                nextAssignees.filter((id) => id !== DELETED_USER_ID),
+                actor.workspace_id,
+              ))
             )
               return json({ error: 'Responsável inválido.' }, 400);
           }
@@ -509,8 +472,9 @@ export default {
                 `Status: ${nextStatus}${nextStatus === 'blocked' ? ' · ' + nextReason : ''}`,
               ),
             );
-          if (d) {
-            const changed = Object.entries(d).filter(
+          if (d && nextAssignees) {
+            const { assignee_id: _, assignee_ids: __, ...fields } = d;
+            const changed = Object.entries(fields).filter(
               ([key, value]) =>
                 String(value) !==
                   String(
@@ -518,6 +482,38 @@ export default {
                   ) &&
                 !(key === 'restricted' && Number(value) === task.restricted),
             );
+            // Order matters: the first selected member becomes the primary assignee.
+            const assigneesChanged =
+              nextAssignees.join() !== task.assignee_ids.join();
+            if (assigneesChanged) {
+              const names = (
+                await env.DB.prepare(
+                  `SELECT id,name FROM users WHERE id IN (${[...new Set([...task.assignee_ids, ...nextAssignees])].map(() => '?').join(',')})`,
+                )
+                  .bind(...new Set([...task.assignee_ids, ...nextAssignees]))
+                  .all<{ id: string; name: string }>()
+              ).results;
+              const label = (ids: string[]) =>
+                ids
+                  .map((id) => names.find((u) => u.id === id)?.name || id)
+                  .join(', ');
+              changed.push([
+                'responsáveis',
+                `${label(task.assignee_ids)} → ${label(nextAssignees)}`,
+              ]);
+              statements.push(
+                env.DB.prepare(
+                  'DELETE FROM task_assignees WHERE task_id=?',
+                ).bind(task.id),
+                ...nextAssignees
+                  .slice(1)
+                  .map((userId) =>
+                    env.DB.prepare(
+                      'INSERT INTO task_assignees(task_id,user_id) VALUES (?,?)',
+                    ).bind(task.id, userId),
+                  ),
+              );
+            }
             if (changed.length) {
               statements.push(
                 env.DB.prepare(
@@ -525,29 +521,33 @@ export default {
                 ).bind(
                   d.title.trim(),
                   d.description,
-                  d.assignee_id,
+                  nextAssignees[0],
                   d.due_date || null,
                   d.priority,
                   d.restricted ? 1 : 0,
                   task.id,
                 ),
               );
-              statements.push(
-                env.DB.prepare(
-                  'INSERT INTO events(id,task_id,actor_id,message) VALUES (?,?,?,?)',
-                ).bind(
-                  crypto.randomUUID(),
-                  task.id,
-                  actor.id,
-                  'Detalhes alterados: ' +
-                    changed
-                      .map(
-                        ([key, value]) =>
-                          `${key}: ${String((task as unknown as Record<string, unknown>)[key] ?? '')} → ${String(value)}`,
-                      )
-                      .join('; '),
-                ),
-              );
+              // Prazo changes are not logged; the history shows only the other fields.
+              const logged = changed.filter(([key]) => key !== 'due_date');
+              if (logged.length)
+                statements.push(
+                  env.DB.prepare(
+                    'INSERT INTO events(id,task_id,actor_id,message) VALUES (?,?,?,?)',
+                  ).bind(
+                    crypto.randomUUID(),
+                    task.id,
+                    actor.id,
+                    'Detalhes alterados: ' +
+                      logged
+                        .map(([key, value]) =>
+                          key === 'responsáveis'
+                            ? `${key}: ${String(value)}`
+                            : `${key}: ${String((task as unknown as Record<string, unknown>)[key] ?? '')} → ${String(value)}`,
+                        )
+                        .join('; '),
+                  ),
+                );
             }
           }
           await env.DB.batch(statements);

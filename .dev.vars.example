@@ -1,2 +1,7 @@
-LOCAL_DEMO=true
 ALLOWED_EMAIL_DOMAIN=forest.ind.br
+ENTRA_TENANT_ID=0275c0a9-897a-4be2-8fa3-ec49e3be273d
+ENTRA_CLIENT_ID=98042fb3-4213-4b41-88fd-9587d2726d29
+ENTRA_REDIRECT_URI=http://localhost:5180/api/auth/microsoft/callback
+
+# Configure manualmente; não compartilhe o valor.
+# ENTRA_CLIENT_SECRET=""

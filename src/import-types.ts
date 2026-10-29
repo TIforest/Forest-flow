@@ -3,6 +3,7 @@ export type ImportTask = {
   title: string;
   description: string;
   assignee_id: string | null;
+  extra_assignee_ids?: string[];
   responsible_name: string;
   due_date: string | null;
   priority: 'normal' | 'high';

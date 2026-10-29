@@ -59,6 +59,27 @@ try {
     text: '👤 Teste Membro\n- ' + task.title + '\n  - Etapa um\n  - Etapa dois',
   });
   assert.equal(preview.status, 200, JSON.stringify(preview.data));
+  const conversation = await call('imports/preview', 'POST', {
+    week,
+    text: 'Teste Coord\n\nTeste Coord - Forest: Envie o relatório na sexta-feira.\nTeste Coord - Forest: Compare o estoque de R$ 48 milhões.\nTeste Membro - Revisar backup',
+  });
+  assert.equal(conversation.status, 200, JSON.stringify(conversation.data));
+  assert.deepEqual(
+    conversation.data.tasks.map((t) => t.assignee_id),
+    [coord, coord, member],
+  );
+  assert.equal(
+    conversation.data.tasks[0].title,
+    'Envie o relatório na sexta-feira.',
+  );
+  assert.ok(conversation.data.tasks[0].due_date);
+  const shared = await call('imports/preview', 'POST', {
+    week,
+    text: 'Responsáveis: Teste Coord e Teste Membro\nConferir estoque',
+  });
+  assert.equal(shared.status, 200);
+  assert.equal(shared.data.tasks[0].assignee_id, coord);
+  assert.deepEqual(shared.data.tasks[0].extra_assignee_ids, [member]);
   assert.equal(preview.data.tasks.length, 1);
   assert.equal(
     preview.data.tasks[0].due_date,
@@ -201,11 +222,38 @@ try {
   });
   assert.equal(duplicate.status, 200);
   assert.deepEqual(duplicate.data.duplicates, [0]);
+  const enriched = await call('imports/preview', 'POST', {
+    week,
+    text:
+      'Teste Coord: Conferência ' +
+      importId +
+      ' junto com Teste Membro para o dia 09/11/2026',
+  });
+  assert.equal(enriched.status, 200, JSON.stringify(enriched.data));
+  assert.equal(enriched.data.tasks[0].due_date, '2026-11-09');
+  assert.deepEqual(enriched.data.tasks[0].extra_assignee_ids, [member]);
+  const saved = await call('imports/commit', 'POST', {
+    week,
+    importId: enriched.data.importId,
+    tasks: enriched.data.tasks,
+  });
+  assert.equal(saved.status, 201, JSON.stringify(saved.data));
+  const sharedTask = (await call('tasks?week=' + week)).data.find(
+    (t) => t.title === enriched.data.tasks[0].title,
+  );
+  assert.ok(sharedTask);
+  assert.equal(sharedTask.due_date, '2026-11-09');
+  assert.deepEqual(sharedTask.assignee_ids.sort(), [coord, member].sort());
+  assert.equal(
+    (await call('tasks/' + sharedTask.id, 'PATCH', { status: 'done' }, member))
+      .status,
+    200,
+  );
   console.log(
     'OK: permissões, lote atômico, confirmação concorrente sem duplicação, checklist e visibilidade.',
   );
 } finally {
   sql(
-    `DELETE FROM events WHERE task_id IN (SELECT id FROM tasks WHERE created_by='${coord}'); DELETE FROM task_weeks WHERE added_by='${coord}'; DELETE FROM tasks WHERE created_by='${coord}'; DELETE FROM task_imports WHERE actor_id='${coord}'; DELETE FROM users WHERE id IN ('${coord}','${member}','${other}');`,
+    `DELETE FROM events WHERE task_id IN (SELECT id FROM tasks WHERE created_by='${coord}'); DELETE FROM task_weeks WHERE added_by='${coord}'; DELETE FROM task_assignees WHERE task_id IN (SELECT id FROM tasks WHERE created_by='${coord}'); DELETE FROM tasks WHERE created_by='${coord}'; DELETE FROM task_imports WHERE actor_id='${coord}'; DELETE FROM users WHERE id IN ('${coord}','${member}','${other}');`,
   );
 }

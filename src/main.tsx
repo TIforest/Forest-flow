@@ -19,9 +19,15 @@ import {
   ArrowLeftRight,
   LogOut,
 } from 'lucide-react';
-import { statuses, type User, type Task, type Status } from './types';
+import {
+  DELETED_USER_ID,
+  statuses,
+  type User,
+  type Task,
+  type Status,
+} from './types';
 import './styles.css';
-import { Members } from './Members';
+import type { Workspace, CorporateUser } from './AuthGate';
 import { AuthGate } from './AuthGate';
 import { Continuity } from './Continuity';
 import { Comments } from './Comments';
@@ -44,6 +50,11 @@ function shift(value: string, days: number) {
   const d = new Date(value + 'T12:00:00');
   d.setDate(d.getDate() + days);
   return sunday(d);
+}
+function inDays(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function display(value: string) {
   return new Date(value + 'T12:00:00').toLocaleDateString('pt-BR', {
@@ -76,11 +87,11 @@ function memberStyle(id: string, user?: User): React.CSSProperties {
 function App({
   signedIn,
   logout,
-  switchProfile,
+  workspace,
 }: {
-  signedIn: User;
+  signedIn: CorporateUser;
   logout: () => Promise<void>;
-  switchProfile: () => Promise<void>;
+  workspace: Workspace;
 }) {
   const identity = signedIn.id;
   const [users, setUsers] = useState<User[]>([]);
@@ -107,7 +118,7 @@ function App({
   const moving = useRef(false);
   const context = useRef('');
   context.current = `${identity}:${week}`;
-  const actor = users.find((u) => u.id === identity) || signedIn;
+  const actor = signedIn;
   const coordinator = actor?.role === 'coordinator';
   useAmbientPause();
   const colorFor = (id: string) =>
@@ -121,7 +132,10 @@ function App({
   ): Promise<T> {
     const res = await fetch('/api/' + path, {
       ...options,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': workspace.id,
+      },
     });
     const body = await res.json();
     if (res.status === 401)
@@ -192,15 +206,20 @@ function App({
   }, [pulse]);
   const visible = tasks.filter(
     (t) =>
-      (view !== 'mine' || t.assignee_id === identity) &&
-      (!person || t.assignee_id === person) &&
+      (view !== 'mine' || t.assignee_ids.includes(identity)) &&
+      (!person || t.assignee_ids.includes(person)) &&
       t.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
   const done = visible.filter((t) => t.status === 'done').length;
   const blocked = visible.filter((t) => t.status === 'blocked').length;
-  const name = (id: string) => users.find((u) => u.id === id)?.name || id;
+  const name = (id: string) =>
+    id === DELETED_USER_ID
+      ? 'Usuário excluído'
+      : users.find((u) => u.id === id)?.name || id;
   const canMove = (task: Task) =>
-    !saving && !moveBusy && (coordinator || task.assignee_id === identity);
+    !saving &&
+    !moveBusy &&
+    (coordinator || task.assignee_ids.includes(identity));
   function stopDragging() {
     setDraggedId(null);
     setDropTarget(null);
@@ -422,10 +441,12 @@ function App({
         )}
         <div className="task-footer">
           <span className="person">
-            <span className="avatar small">
-              {name(task.assignee_id).slice(0, 1)}
-            </span>
-            {name(task.assignee_id).split(' ·')[0]}
+            {task.assignee_ids.map((id) => (
+              <span className="avatar small" key={id} style={colorFor(id)}>
+                {name(id).slice(0, 1)}
+              </span>
+            ))}
+            {task.assignee_ids.map((id) => name(id).split(' ·')[0]).join(', ')}
           </span>
           <span>{task.due_date ? display(task.due_date) : 'Sem prazo'}</span>
         </div>
@@ -436,13 +457,6 @@ function App({
     ['mine', 'Minha semana', LayoutDashboard],
     ['team', 'Equipe', Users],
     ['meeting', 'Reunião semanal', CalendarDays],
-    ...(coordinator
-      ? ([['members', 'Integrantes', Users]] as [
-          string,
-          string,
-          typeof Users,
-        ][])
-      : []),
   ];
   const navIndex = Math.max(
     0,
@@ -459,9 +473,11 @@ function App({
           <Brand />
         </a>
         <div className="workspace">
-          <span className="workspace-icon">TI</span>
+          <span className="workspace-icon">
+            {workspace.name.slice(0, 2).toUpperCase()}
+          </span>
           <div>
-            <strong>Tecnologia da Informação</strong>
+            <strong>{workspace.name}</strong>
             <small>Espaço de trabalho</small>
           </div>
         </div>
@@ -494,19 +510,11 @@ function App({
           </span>
           <div>
             <strong>{actor?.name || 'Carregando…'}</strong>
-            <small>{actor?.job}</small>
+            <small>
+              {actor?.role === 'coordinator' ? 'Coordenador' : 'Membro'}
+            </small>
           </div>
           <div className="profile-actions">
-            <button
-              type="button"
-              title="Trocar perfil"
-              onClick={() =>
-                void switchProfile().catch((e) => setError(e.message))
-              }
-            >
-              <ArrowLeftRight size={15} />
-              <span>Trocar perfil</span>
-            </button>
             <button
               type="button"
               title="Sair"
@@ -577,12 +585,7 @@ function App({
             )}
           </div>
           {view === 'members' && coordinator ? (
-            <Members
-              users={users}
-              actorId={identity}
-              api={api}
-              refresh={async () => setUsers(await api<User[]>('users'))}
-            />
+            <p>Gerencie os acessos no painel de administração.</p>
           ) : (
             <>
               <div className="stats" onPointerMove={spotlight}>
@@ -681,11 +684,14 @@ function App({
                           <span className="avatar small">{u.name[0]}</span>
                           <strong>{u.name}</strong>
                           <span>
-                            {tasks.filter((t) => t.assignee_id === u.id).length}
+                            {
+                              tasks.filter((t) => t.assignee_ids.includes(u.id))
+                                .length
+                            }
                           </span>
                         </div>
                         {tasks
-                          .filter((t) => t.assignee_id === u.id)
+                          .filter((t) => t.assignee_ids.includes(u.id))
                           .map((t, i) => card(t, i))}
                       </div>
                     ))}
@@ -917,10 +923,10 @@ function TaskPanel({
 }) {
   const isNew = task === 'new';
   const [title, setTitle] = useState(isNew ? '' : task.title);
-  const [assignee, setAssignee] = useState(
-    isNew ? (actor?.role === 'member' ? actor.id : '') : task.assignee_id,
+  const [assignees, setAssignees] = useState<string[]>(
+    isNew ? (actor?.role === 'member' ? [actor.id] : []) : task.assignee_ids,
   );
-  const [due, setDue] = useState(isNew ? '' : task.due_date || '');
+  const [due, setDue] = useState(isNew ? inDays(7) : task.due_date || '');
   const [priority, setPriority] = useState(isNew ? 'normal' : task.priority);
   const [description, setDescription] = useState(isNew ? '' : task.description);
   const [restricted, setRestricted] = useState(
@@ -940,16 +946,15 @@ function TaskPanel({
   const dialogRef = useRef<HTMLDivElement>(null);
   const canEdit =
     actor?.role === 'coordinator' ||
-    (isNew ? !!actor : task.assignee_id === actor?.id);
-  const canEditDetails =
-    isNew ||
-    actor?.role === 'coordinator' ||
-    (!isNew && task.created_by === actor?.id && task.assignee_id === actor?.id);
-  const canManageDetails = isNew || actor?.role === 'coordinator';
-  const canDelete =
+    (isNew ? !!actor : task.assignee_ids.includes(actor?.id || ''));
+  const ownSoloTask =
     !isNew &&
-    (actor?.role === 'coordinator' ||
-      (task.created_by === actor?.id && task.assignee_id === actor?.id));
+    task.created_by === actor?.id &&
+    task.assignee_ids.length === 1 &&
+    task.assignee_id === actor?.id;
+  const canEditDetails = isNew || actor?.role === 'coordinator' || ownSoloTask;
+  const canManageDetails = isNew || actor?.role === 'coordinator';
+  const canDelete = !isNew && (actor?.role === 'coordinator' || ownSoloTask);
   useEffect(() => {
     if (isNew) titleRef.current?.focus();
     else if (initialStatus === 'blocked') {
@@ -963,6 +968,10 @@ function TaskPanel({
   }, []);
   async function submit(another: boolean) {
     if (saving || submitting.current || confirmDelete || !canEdit) return;
+    if (!assignees.length) {
+      setError('Selecione ao menos um responsável.');
+      return;
+    }
     submitting.current = true;
     setError('');
     try {
@@ -970,7 +979,7 @@ function TaskPanel({
         isNew
           ? {
               title,
-              assignee_id: assignee,
+              assignee_ids: assignees,
               due_date: due,
               priority,
               description,
@@ -985,7 +994,7 @@ function TaskPanel({
                     details: {
                       title,
                       description,
-                      assignee_id: assignee,
+                      assignee_ids: assignees,
                       due_date: due,
                       priority,
                       restricted,
@@ -1093,28 +1102,63 @@ function TaskPanel({
                 onChange={(e) => setTitle(e.target.value)}
               />
             </label>
-            <label>
-              Responsável <span>*</span>
-              <select
-                required
-                value={assignee}
-                disabled={actor?.role !== 'coordinator'}
-                onChange={(e) => setAssignee(e.target.value)}
-              >
-                <option value="">Selecione uma pessoa</option>
+            <fieldset className="assignee-picker">
+              <legend>
+                Responsáveis <span>*</span>
+              </legend>
+              <div className="assignee-options">
+                {!isNew && task.assignee_ids.includes(DELETED_USER_ID) && (
+                  <label className="assignee-option">
+                    <input
+                      type="checkbox"
+                      checked={assignees.includes(DELETED_USER_ID)}
+                      disabled={
+                        actor?.role !== 'coordinator' ||
+                        !assignees.includes(DELETED_USER_ID)
+                      }
+                      onChange={() =>
+                        setAssignees((current) =>
+                          current.filter((id) => id !== DELETED_USER_ID),
+                        )
+                      }
+                    />
+                    Usuário excluído
+                  </label>
+                )}
                 {users.map((u) => (
-                  <option key={u.id} value={u.id}>
+                  <label
+                    key={u.id}
+                    className={`assignee-option ${assignees.includes(u.id) ? 'is-selected' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={assignees.includes(u.id)}
+                      disabled={actor?.role !== 'coordinator'}
+                      onChange={(e) =>
+                        setAssignees((current) =>
+                          e.target.checked
+                            ? [...current, u.id]
+                            : current.filter((id) => id !== u.id),
+                        )
+                      }
+                    />
                     {u.name}
-                  </option>
+                  </label>
                 ))}
-              </select>
+              </div>
+              {actor?.role === 'coordinator' && (
+                <small className="self-task-hint">
+                  Selecione uma ou mais pessoas. A primeira marcada é a
+                  responsável principal.
+                </small>
+              )}
               {isNew && actor?.role === 'member' && (
                 <small className="self-task-hint">
                   A atividade será atribuída a você. A coordenação pode delegar
                   para outras pessoas.
                 </small>
               )}
-            </label>
+            </fieldset>
             <div className="field-row">
               <label>
                 Prazo
@@ -1221,18 +1265,29 @@ function TaskPanel({
                 <div className="history">
                   <h3>Histórico</h3>
                   {events.length ? (
-                    events.map((e) => (
-                      <div key={e.id}>
-                        <strong>{e.name}</strong>
-                        <p>
-                          {e.message.replace(
+                    events
+                      .map((e) => ({
+                        ...e,
+                        // Older records still carry the due_date change; hide it.
+                        message: e.message
+                          .replace(/(; )?due_date: [^;]*/g, '')
+                          .replace(
+                            /^Detalhes alterados: ; /,
+                            'Detalhes alterados: ',
+                          )
+                          .replace(
                             /Status: (progress|blocked|done)/,
                             (_, s: Status) => `Status: ${statuses[s]}`,
-                          )}
-                        </p>
-                        <small>{e.created_at}</small>
-                      </div>
-                    ))
+                          ),
+                      }))
+                      .filter((e) => e.message !== 'Detalhes alterados: ')
+                      .map((e) => (
+                        <div key={e.id}>
+                          <strong>{e.name}</strong>
+                          <p>{e.message}</p>
+                          <small>{e.created_at}</small>
+                        </div>
+                      ))
                   ) : (
                     <p className="muted">Sem alterações registradas.</p>
                   )}
@@ -1343,12 +1398,12 @@ function TaskPanel({
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthGate>
-      {(user, logout, switchProfile) => (
+      {(user, logout, workspace) => (
         <App
-          key={user.id}
+          key={user.id + workspace.id + workspace.role}
           signedIn={user}
           logout={logout}
-          switchProfile={switchProfile}
+          workspace={workspace}
         />
       )}
     </AuthGate>

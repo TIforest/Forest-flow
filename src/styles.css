@@ -415,6 +415,55 @@ input[type='date']::-webkit-calendar-picker-indicator {
   opacity: 0.7;
   cursor: var(--cursor-pointer), pointer;
 }
+.assignee-picker {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.assignee-picker legend,
+.assignee-picker-label {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+}
+.assignee-picker legend span {
+  color: var(--lime);
+}
+.assignee-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.assignee-picker .assignee-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 7px 14px 7px 10px;
+  background: var(--glass);
+  color: var(--text);
+  font-weight: 450;
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+.assignee-picker .assignee-option.is-selected {
+  border-color: var(--lime-line);
+  background: var(--lime-soft);
+}
+.assignee-option input {
+  width: 16px;
+  height: 16px;
+}
+.assignee-option:has(input:disabled),
+.assignee-option input:disabled {
+  cursor: default;
+}
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1141,6 +1190,10 @@ body.is-dragging-task * {
   gap: 8px;
   min-width: 0;
   color: var(--text-2);
+}
+.person .avatar + .avatar {
+  margin-left: -14px;
+  box-shadow: 0 0 0 2px var(--ink-1);
 }
 .person + span {
   color: var(--text);
@@ -2593,4 +2646,249 @@ body.is-dragging-task * {
   .profile-option {
     transform: none !important;
   }
+}
+
+/* Corporate identity and administration */
+.corporate-bar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 24px;
+  background: var(--ink-1, #0c2a30);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  color: #a6bdb9;
+}
+.corporate-bar > span:first-child {
+  margin-right: auto;
+}
+.corporate-bar label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.corporate-bar select {
+  max-width: 280px;
+}
+.corporate-bar button {
+  padding: 8px 12px;
+}
+.microsoft-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-decoration: none;
+  margin-top: 24px;
+  padding: 15px;
+  border-radius: 10px;
+}
+.admin-panel {
+  max-width: 1300px;
+  margin: auto;
+  padding: 40px 32px;
+}
+.admin-sections {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.admin-sections section {
+  background: #103a41;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 0;
+}
+.admin-sections h2 {
+  margin: 0 0 16px;
+}
+.admin-sections form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.admin-sections label {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+.admin-sections input,
+.admin-sections select,
+.corporate-bar select {
+  background: #0a252a;
+  color: #f3f6f4;
+  border: 1px solid #7d9a96;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 0;
+}
+.admin-sections .check {
+  display: flex;
+  align-items: center;
+  flex-basis: 100%;
+}
+.admin-sections .check input {
+  width: auto;
+}
+.admin-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.admin-row > :first-child {
+  margin-right: auto;
+}
+.admin-table-wrap {
+  overflow: auto;
+}
+.admin-sections table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.admin-sections td,
+.admin-sections th {
+  padding: 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.admin-sections td button {
+  margin: 4px;
+}
+.admin-sections pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.admin-sections details {
+  padding: 10px 0;
+}
+.admin-sections small {
+  color: #a6bdb9;
+}
+.onboarding-card {
+  width: min(100%, 640px);
+  max-width: 640px;
+}
+.onboarding-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.onboarding-fields label {
+  display: grid;
+  gap: 8px;
+}
+.onboarding-fields input,
+.onboarding-fields textarea,
+.access-review textarea {
+  background: #0a252a;
+  color: #f3f6f4;
+  border: 1px solid #7d9a96;
+  border-radius: 8px;
+  padding: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.onboarding-fields input[readonly] {
+  color: #a6bdb9;
+}
+.onboarding-fields small {
+  color: #a6bdb9;
+}
+.request-summary {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 2fr;
+  gap: 10px 20px;
+  margin: 20px 0;
+  overflow-wrap: anywhere;
+}
+.request-summary dt {
+  color: #a6bdb9;
+}
+.request-summary dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.access-review {
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+.access-review .review-note {
+  flex-basis: 100%;
+}
+.admin-row h2 {
+  margin: 0;
+}
+.onboarding-card .auth-notice p {
+  margin-bottom: 0;
+}
+.delete-profile-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(3, 14, 17, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+}
+.delete-profile-dialog {
+  width: min(100%, 640px);
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  margin: auto;
+}
+.delete-profile-dialog h2 {
+  margin-top: 0;
+}
+.delete-profile-dialog p {
+  line-height: 1.7;
+}
+.delete-profile-dialog label {
+  display: grid;
+  gap: 10px;
+}
+.delete-profile-dialog input {
+  background: #0a252a;
+  color: #f3f6f4;
+  border: 1px solid #7d9a96;
+  border-radius: 8px;
+  padding: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.delete-profile-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+.danger-button {
+  border: 1px solid #f08a7e;
+  background: rgba(240, 138, 126, 0.12);
+  color: #ffd1ca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font: inherit;
+  cursor: var(--cursor-pointer), pointer;
+}
+.danger-button:disabled {
+  opacity: 0.45;
+  cursor: var(--cursor-arrow), default;
 }

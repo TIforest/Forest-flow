@@ -168,10 +168,14 @@ export function ImportTasks({
                 50 cartões por análise.
               </small>
               <p className="muted">
-                Use 👤 Nome para separar os responsáveis e uma tarefa por linha,
-                com ou sem -. Subtópicos recuados viram checklist. Nenhum
-                serviço externo é utilizado. Os cartões só serão salvos após sua
-                confirmação.
+                Aceita listas do Teams, nomes como cabeçalho, listas numeradas e
+                linhas como “Eduardo: Enviar relatórios”. Sem marcadores, use
+                uma atividade por linha. Subtópicos recuados viram checklist.
+                Datas explícitas, como “para o dia 09/11”, preenchem o prazo.
+                Expressões como “junto com Tonello” adicionam membros
+                cadastrados. Sem prazo explícito, mantém 7 dias. Revise os
+                campos antes de confirmar. Não utiliza serviços externos. Os
+                cartões só serão salvos após sua confirmação.
               </p>
             </>
           ) : (
@@ -243,7 +247,12 @@ export function ImportTasks({
                           required
                           value={t.assignee_id || ''}
                           onChange={(e) =>
-                            update(i, { assignee_id: e.target.value || null })
+                            update(i, {
+                              assignee_id: e.target.value || null,
+                              extra_assignee_ids: (
+                                t.extra_assignee_ids || []
+                              ).filter((id) => id !== e.target.value),
+                            })
                           }
                         >
                           <option value="">Selecione…</option>
@@ -296,6 +305,40 @@ export function ImportTasks({
                         </select>
                       </label>
                     </div>
+                    {t.assignee_id && users.length > 1 && (
+                      <div className="assignee-picker">
+                        <span className="assignee-picker-label">
+                          Também responsáveis
+                        </span>
+                        <div className="assignee-options">
+                          {users
+                            .filter((u) => u.id !== t.assignee_id)
+                            .map((u) => {
+                              const extras = t.extra_assignee_ids || [];
+                              const checked = extras.includes(u.id);
+                              return (
+                                <label
+                                  key={u.id}
+                                  className={`assignee-option ${checked ? 'is-selected' : ''}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      update(i, {
+                                        extra_assignee_ids: e.target.checked
+                                          ? [...extras, u.id]
+                                          : extras.filter((id) => id !== u.id),
+                                      })
+                                    }
+                                  />
+                                  {u.name}
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                     {t.status === 'blocked' && (
                       <label>
                         Motivo do bloqueio

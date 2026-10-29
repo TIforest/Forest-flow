@@ -1,3 +1,4 @@
+import type { Actor } from './auth';
 import type { User } from '../src/types';
 import type { ImportTask, ImportPreview } from '../src/import-types';
 import { parsePlanning } from './planning-parser';
@@ -27,6 +28,12 @@ export function validTask(
     string(t.responsible_name, 100) &&
     ((allowUnassigned && t.assignee_id === null) ||
       (typeof t.assignee_id === 'string' && ids.has(t.assignee_id))) &&
+    (t.extra_assignee_ids === undefined ||
+      (Array.isArray(t.extra_assignee_ids) &&
+        t.extra_assignee_ids.length <= 20 &&
+        t.extra_assignee_ids.every(
+          (id) => typeof id === 'string' && ids.has(id),
+        ))) &&
     (t.due_date === null || validDate(t.due_date)) &&
     ['normal', 'high'].includes(t.priority) &&
     ['progress', 'blocked', 'done'].includes(t.status) &&
@@ -40,7 +47,7 @@ export function validTask(
 export async function importRoute(
   request: Request,
   env: ImportEnv,
-  actor: User,
+  actor: Actor,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
   if (!['/api/imports/preview', '/api/imports/commit'].includes(path))
@@ -60,8 +67,10 @@ export async function importRoute(
     return reply({ error: 'Escolha uma semana iniciada no domingo.' }, 400);
   const users = (
     await env.DB.prepare(
-      'SELECT id,name,role,job,color FROM users ORDER BY name',
-    ).all<User>()
+      "SELECT u.id,u.name,m.role,u.job,u.color FROM users u JOIN workspace_memberships m ON m.user_id=u.id WHERE m.workspace_id=? AND u.access_status!='merged' ORDER BY u.name",
+    )
+      .bind(actor.workspace_id)
+      .all<User>()
   ).results;
   if (path.endsWith('/preview')) {
     if (!string(b.text, 20000, true))
@@ -74,9 +83,9 @@ export async function importRoute(
     }
     const existing = (
       await env.DB.prepare(
-        'SELECT title,assignee_id FROM tasks JOIN task_weeks ON task_weeks.task_id=tasks.id WHERE task_weeks.week=? AND deleted_at IS NULL',
+        'SELECT title,assignee_id FROM tasks JOIN task_weeks ON task_weeks.task_id=tasks.id WHERE tasks.workspace_id=? AND task_weeks.week=? AND deleted_at IS NULL',
       )
-        .bind(b.week)
+        .bind(actor.workspace_id, b.week)
         .all<{ title: string; assignee_id: string }>()
     ).results;
     const normalize = (s: string) =>
@@ -120,6 +129,9 @@ export async function importRoute(
     title: t.title.trim(),
     description: t.description,
     assignee_id: t.assignee_id,
+    extra_assignee_ids: [...new Set(t.extra_assignee_ids || [])].filter(
+      (id) => id !== t.assignee_id,
+    ),
     due_date: t.due_date,
     priority: t.priority,
     status: t.status,
@@ -130,7 +142,13 @@ export async function importRoute(
     new Uint8Array(
       await crypto.subtle.digest(
         'SHA-256',
-        new TextEncoder().encode(JSON.stringify({ week: b.week, tasks })),
+        new TextEncoder().encode(
+          JSON.stringify({
+            workspace: actor.workspace_id,
+            week: b.week,
+            tasks,
+          }),
+        ),
       ),
     ),
   )
@@ -165,7 +183,7 @@ export async function importRoute(
     const id = crypto.randomUUID();
     statements.push(
       env.DB.prepare(
-        'INSERT INTO tasks(id,title,description,assignee_id,created_by,week,due_date,priority,status,block_reason,completed_at,checklist) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO tasks(id,title,description,assignee_id,created_by,week,due_date,priority,status,block_reason,completed_at,checklist,workspace_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       ).bind(
         id,
         t.title,
@@ -185,10 +203,16 @@ export async function importRoute(
             done: false,
           })),
         ),
+        actor.workspace_id,
       ),
       env.DB.prepare(
         'INSERT INTO task_weeks(task_id,week,added_by) VALUES (?,?,?)',
       ).bind(id, b.week, actor.id),
+      ...t.extra_assignee_ids.map((userId) =>
+        env.DB.prepare(
+          'INSERT INTO task_assignees(task_id,user_id) VALUES (?,?)',
+        ).bind(id, userId),
+      ),
       env.DB.prepare(
         'INSERT INTO events(id,task_id,actor_id,message) VALUES (?,?,?,?)',
       ).bind(

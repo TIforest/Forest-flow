@@ -1,279 +1,479 @@
+import * as oauth from 'oauth4webapi';
 import type { User } from '../src/types';
 export interface AuthEnv {
-  ALLOWED_EMAIL_DOMAIN?: string;
   DB: D1Database;
-  LOCAL_DEMO?: string;
+  ENTRA_TENANT_ID?: string;
+  ENTRA_CLIENT_ID?: string;
+  ENTRA_CLIENT_SECRET?: string;
+  ENTRA_REDIRECT_URI?: string;
+  ALLOWED_EMAIL_DOMAIN?: string;
 }
-const fields = 'users.id, users.name, users.role, users.job, users.color';
-// Limite absoluto da sessão e limite de inatividade (qualquer chamada renova).
-const SESSION_MS = 8 * 3600000;
-const IDLE_MS = 10 * 60000;
-type SessionRow = {
-  token_hash: string;
-  profile_id: string | null;
-  last_seen_at: number;
+export type Account = User & {
+  is_admin: number;
+  onboarding_required: number;
+  access_status: string;
+  email: string;
 };
-export const local = (request: Request) =>
-  ['127.0.0.1', 'localhost'].includes(new URL(request.url).hostname);
-const hex = (data: ArrayBuffer) =>
-  [...new Uint8Array(data)]
-    .map((n) => n.toString(16).padStart(2, '0'))
-    .join('');
-const token = () => hex(crypto.getRandomValues(new Uint8Array(32)).buffer);
-const digest = async (s: string) =>
-  hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
-async function passwordHash(password: string, salt: string) {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-  return hex(
-    await crypto.subtle.deriveBits(
-      {
-        name: 'PBKDF2',
-        salt: new TextEncoder().encode(salt),
-        iterations: 100000,
-        hash: 'SHA-256',
-      },
-      key,
-      256,
+export type Actor = Account & { workspace_id: string };
+export const local = (r: Request) =>
+  ['localhost', '127.0.0.1'].includes(new URL(r.url).hostname);
+export const digest = async (s: string) =>
+  Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)),
     ),
-  );
-}
-function equal(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-const cookieValue = (request: Request) =>
-  request.headers
+    (n) => n.toString(16).padStart(2, '0'),
+  ).join('');
+const random = () => oauth.generateRandomState();
+const SESSION_MS = 8 * 3600000,
+  IDLE_MS = 10 * 60000;
+// Bootstrap is pinned to the directory object, never a mutable email or the first person to sign in.
+export const ADMIN_TENANT = '0275c0a9-897a-4be2-8fa3-ec49e3be273d';
+export const ADMIN_OBJECT = '6d12cf3c-b505-4a3e-8257-b7ee7a01eee2';
+const value = (r: Request, name: string) =>
+  r.headers
     .get('Cookie')
-    ?.match(/(?:^|;\s*)forest_session=([a-f0-9]{64})(?:;|$)/)?.[1];
-const cookie = (request: Request, value: string, age: number) =>
-  `forest_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${local(request) ? '' : '; Secure'}`;
-const reply = (
-  data: unknown,
-  status = 200,
-  headers: Record<string, string> = {},
-) =>
-  Response.json(data, {
-    status,
-    headers: { 'Cache-Control': 'no-store', ...headers },
+    ?.split(';')
+    .map((s) => s.trim())
+    .find((s) => s.startsWith(name + '='))
+    ?.slice(name.length + 1) || '';
+const cookie = (r: Request, name: string, v: string, age: number) =>
+  `${name}=${v}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}${local(r) ? '' : '; Secure'}`;
+export const reply = (data: unknown, status = 200) =>
+  Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
+function redirect(r: Request, path: string, cookies: string[] = []) {
+  const headers = new Headers({
+    Location: path,
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
   });
-// Sessão viva: dentro do prazo absoluto e usada nos últimos IDLE_MS.
-// Sessões paradas são removidas; o uso recente é registrado a cada 30 s.
-async function liveSession(
-  request: Request,
+  cookies.forEach((c) => headers.append('Set-Cookie', c));
+  return new Response(null, { status: 302, headers });
+}
+export async function getAccount(
+  r: Request,
   env: AuthEnv,
-): Promise<SessionRow | null> {
-  const value = cookieValue(request);
-  if (!value) return null;
-  const hash = await digest(value);
-  const now = Date.now();
+  touch = true,
+): Promise<Account | null> {
+  const raw = value(r, 'forest_corporate');
+  if (!/^[\w-]{40,128}$/.test(raw)) return null;
+  const hash = await digest(raw),
+    now = Date.now();
   const row = await env.DB.prepare(
-    'SELECT token_hash,profile_id,last_seen_at FROM team_sessions WHERE token_hash=? AND expires_at>?',
+    `SELECT u.*,i.email,s.last_seen_at FROM corporate_sessions s JOIN users u ON u.id=s.user_id JOIN corporate_identities i ON i.user_id=u.id WHERE s.token_hash=? AND s.expires_at>?`,
   )
     .bind(hash, now)
-    .first<SessionRow>();
+    .first<Account & { last_seen_at: number }>();
   if (!row) return null;
-  if (row.last_seen_at < now - IDLE_MS) {
-    await env.DB.prepare('DELETE FROM team_sessions WHERE token_hash=?')
+  if (row.last_seen_at < now - IDLE_MS || row.access_status === 'merged') {
+    await env.DB.prepare('DELETE FROM corporate_sessions WHERE token_hash=?')
       .bind(hash)
       .run();
     return null;
   }
-  if (row.last_seen_at < now - 30000)
+  if (touch && row.last_seen_at < now - 30000)
     await env.DB.prepare(
-      'UPDATE team_sessions SET last_seen_at=? WHERE token_hash=?',
+      'UPDATE corporate_sessions SET last_seen_at=? WHERE token_hash=?',
     )
       .bind(now, hash)
       .run();
   return row;
 }
+export async function listWorkspaces(env: AuthEnv, user: Account) {
+  return (
+    await env.DB.prepare(
+      user.is_admin
+        ? `SELECT w.*, 'coordinator' AS role FROM workspaces w WHERE active=1 ORDER BY name`
+        : `SELECT w.*,m.role FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id WHERE active=1 AND m.user_id=? ORDER BY name`,
+    )
+      .bind(...(user.is_admin ? [] : [user.id]))
+      .all()
+  ).results;
+}
 export async function getActor(
-  request: Request,
+  r: Request,
   env: AuthEnv,
-): Promise<User | null> {
-  if (cookieValue(request)) {
-    const session = await liveSession(request, env);
-    if (!session?.profile_id) return null;
-    return env.DB.prepare(`SELECT ${fields} FROM users WHERE id=?`)
-      .bind(session.profile_id)
-      .first<User>();
-  }
-  if (local(request) && env.LOCAL_DEMO === 'true')
-    return env.DB.prepare(`SELECT ${fields} FROM users WHERE id=?`)
-      .bind(request.headers.get('X-Demo-User') || '')
-      .first<User>();
-  return null;
+): Promise<Actor | null> {
+  const user = await getAccount(r, env);
+  if (
+    !user ||
+    user.access_status !== 'active' ||
+    (!user.is_admin && user.onboarding_required)
+  )
+    return null;
+  const id = r.headers.get('X-Workspace-Id');
+  if (!id) return null;
+  const w = await env.DB.prepare(
+    `SELECT w.id,m.role FROM workspaces w LEFT JOIN workspace_memberships m ON m.workspace_id=w.id AND m.user_id=? WHERE w.id=? AND w.active=1`,
+  )
+    .bind(user.id, id)
+    .first<{ id: string; role: 'member' | 'coordinator' | null }>();
+  if (!w || (!user.is_admin && !w.role)) return null;
+  return {
+    ...user,
+    role: user.is_admin ? 'coordinator' : w.role!,
+    workspace_id: w.id,
+  };
 }
-async function sessionResponse(request: Request, env: AuthEnv) {
-  const value = token();
-  const now = Date.now();
-  await env.DB.batch([
-    env.DB.prepare(
-      'DELETE FROM team_sessions WHERE expires_at<? OR last_seen_at<?',
-    ).bind(now, now - IDLE_MS),
-    env.DB.prepare(
-      'INSERT INTO team_sessions(token_hash,expires_at,last_seen_at) VALUES (?,?,?)',
-    ).bind(await digest(value), now + SESSION_MS, now),
-  ]);
-  return reply({ authenticated: true, user: null }, 200, {
-    'Set-Cookie': cookie(request, value, SESSION_MS / 1000),
-  });
-}
-const teamSession = liveSession;
-const expired = (request: Request) =>
-  cookieValue(request)
-    ? reply(
-        {
-          error: 'Sua sessão foi encerrada por inatividade. Entre de novo.',
-          reason: 'expired',
-        },
-        401,
-      )
-    : reply({ error: 'Entre para continuar.' }, 401);
 export async function authRoute(
-  request: Request,
+  r: Request,
   env: AuthEnv,
 ): Promise<Response | null> {
-  const path = new URL(request.url).pathname;
+  const url = new URL(r.url),
+    path = url.pathname;
   if (!path.startsWith('/api/auth/')) return null;
-  if (path === '/api/auth/config' && request.method === 'GET')
+  if (path === '/api/auth/config' && r.method === 'GET')
     return reply({
+      provider: 'microsoft',
       registrationEnabled: false,
-      sharedLogin: true,
-      sharedEmail: 'ti@forest.ind.br',
-      confirmationRequired: false,
-      allowedDomain: env.ALLOWED_EMAIL_DOMAIN || 'forest.ind.br',
+      sharedLogin: false,
     });
-  if (path === '/api/auth/me' && request.method === 'GET') {
-    const session = await teamSession(request, env);
-    return session
-      ? reply({ authenticated: true, user: await getActor(request, env) })
-      : expired(request);
-  }
-  if (path === '/api/auth/profiles' && request.method === 'GET') {
-    if (!(await teamSession(request, env))) return expired(request);
-    const profiles = await env.DB.prepare(
-      'SELECT ' + fields + ' FROM users ORDER BY name',
-    ).all();
-    return reply({ profiles: profiles.results });
-  }
-  if (path === '/api/auth/profile' && request.method === 'POST') {
-    const session = await teamSession(request, env);
-    if (!session) return expired(request);
-    const body = (await request.json()) as { profileId?: unknown };
-    const user =
-      typeof body.profileId === 'string'
-        ? await env.DB.prepare('SELECT ' + fields + ' FROM users WHERE id=?')
-            .bind(body.profileId)
-            .first<User>()
-        : null;
-    if (body.profileId !== null && !user)
-      return reply({ error: 'Perfil inválido.' }, 400);
-    const value = token();
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM team_sessions WHERE token_hash=?').bind(
-        session.token_hash,
-      ),
-      env.DB.prepare(
-        'INSERT INTO team_sessions(token_hash,profile_id,expires_at,last_seen_at) VALUES (?,?,?,?)',
-      ).bind(
-        await digest(value),
-        user?.id || null,
-        Date.now() + SESSION_MS,
-        Date.now(),
-      ),
-    ]);
-    return reply({ authenticated: true, user }, 200, {
-      'Set-Cookie': cookie(request, value, SESSION_MS / 1000),
+  if (path === '/api/auth/me' && r.method === 'GET') {
+    const user = await getAccount(r, env, false);
+    if (!user)
+      return reply({ error: 'Entre com a Microsoft para continuar.' }, 401);
+    return reply({
+      authenticated: true,
+      user,
+      pendingRequests: user.is_admin
+        ? (
+            await env.DB.prepare(
+              "SELECT count(*) n FROM access_requests a JOIN users u ON u.id=a.user_id WHERE a.status='submitted' AND u.access_status='pending'",
+            ).first<{ n: number }>()
+          )?.n || 0
+        : 0,
+      onboarding:
+        user.access_status === 'pending'
+          ? await env.DB.prepare(
+              'SELECT name,job,department,unit,notes,status,submitted_at,review_note FROM access_requests WHERE user_id=?',
+            )
+              .bind(user.id)
+              .first()
+          : null,
+      workspaces:
+        user.access_status === 'active' ? await listWorkspaces(env, user) : [],
     });
   }
-  if (path === '/api/auth/logout' && request.method === 'POST') {
-    const value = cookieValue(request);
-    if (value)
-      await env.DB.prepare('DELETE FROM team_sessions WHERE token_hash=?')
-        .bind(await digest(value))
-        .run();
-    return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, '', 0) });
+  if (path === '/api/auth/logout' && r.method === 'POST') {
+    await env.DB.prepare('DELETE FROM corporate_sessions WHERE token_hash=?')
+      .bind(await digest(value(r, 'forest_corporate')))
+      .run();
+    const response = reply({ ok: true });
+    response.headers.append('Set-Cookie', cookie(r, 'forest_corporate', '', 0));
+    return response;
   }
-  if (request.method !== 'POST')
-    return reply({ error: 'Rota não encontrada.' }, 404);
-  // Atomic counters limit expensive password verification and token attempts.
-  const ip = request.headers.get('CF-Connecting-IP') || 'local';
-  const bucket = await digest(ip + ':' + Math.floor(Date.now() / 900000));
-  await env.DB.prepare('DELETE FROM auth_limits WHERE expires_at < ?')
-    .bind(Date.now())
-    .run();
-  const limit = await env.DB.prepare(
-    'INSERT INTO auth_limits VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count',
+  if (
+    !['/api/auth/microsoft/start', '/api/auth/microsoft/callback'].includes(
+      path,
+    ) ||
+    r.method !== 'GET'
   )
-    .bind(bucket, Date.now() + 900000)
-    .first<{ count: number }>();
-  if ((limit?.count || 0) > 30)
-    return reply({ error: 'Muitas tentativas. Aguarde 15 minutos.' }, 429);
-  const b = (await request.json()) as Record<string, unknown>;
-  if (!b || typeof b !== 'object')
-    return reply({ error: 'Dados inválidos.' }, 400);
-  if (path !== '/api/auth/login')
     return reply(
       {
-        error: 'O cadastro individual foi desativado. Use o acesso da equipe.',
+        error:
+          'Use o login Microsoft. O login compartilhado e a seleção de perfis foram desativados.',
       },
       410,
     );
-  const email = typeof b.email === 'string' ? b.email.trim().toLowerCase() : '';
-  const password = typeof b.password === 'string' ? b.password : '';
   if (
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-    email.length > 254 ||
-    password.length < 8 ||
-    password.length > 128
+    !env.ENTRA_TENANT_ID ||
+    !env.ENTRA_CLIENT_ID ||
+    !env.ENTRA_CLIENT_SECRET ||
+    !env.ENTRA_REDIRECT_URI
   )
     return reply(
-      { error: 'Informe um e-mail válido e uma senha de 8 a 128 caracteres.' },
+      { error: 'O login Microsoft ainda não foi configurado no servidor.' },
+      503,
+    );
+  const callback = new URL(env.ENTRA_REDIRECT_URI);
+  if (callback.origin !== url.origin)
+    return reply(
+      {
+        error: `Abra o aplicativo em ${callback.origin} para entrar com a Microsoft.`,
+      },
       400,
     );
-  if (path === '/api/auth/login') {
-    const account = await env.DB.prepare(
-      'SELECT * FROM team_credentials WHERE email=?',
-    )
-      .bind(email)
-      .first<{
-        user_id: string;
-        salt: string;
-        password_hash: string;
-        email_verified_at: string | null;
-      }>();
-    const hash = await passwordHash(
-      password,
-      account?.salt || 'invalid-account-dummy-salt',
+  const issuer = `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/v2.0`;
+  const as: oauth.AuthorizationServer = {
+    issuer,
+    authorization_endpoint: `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/oauth2/v2.0/authorize`,
+    token_endpoint: `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/oauth2/v2.0/token`,
+    jwks_uri: `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}/discovery/v2.0/keys`,
+  };
+  const client: oauth.Client = {
+    client_id: env.ENTRA_CLIENT_ID,
+    id_token_signed_response_alg: 'RS256',
+  };
+  if (path.endsWith('/start')) {
+    const state = random(),
+      browser = random(),
+      nonce = oauth.generateRandomNonce(),
+      verifier = oauth.generateRandomCodeVerifier();
+    const bucket = await digest(
+      (r.headers.get('CF-Connecting-IP') || 'local') +
+        ':oidc:' +
+        Math.floor(Date.now() / 600000),
     );
-    if (
-      email !== 'ti@forest.ind.br' ||
-      !account ||
-      !equal(hash, account.password_hash)
+    const limited = await env.DB.prepare(
+      'INSERT INTO auth_limits VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count',
     )
-      return reply({ error: 'E-mail ou senha incorretos.' }, 401);
-    return sessionResponse(request, env);
+      .bind(bucket, Date.now() + 600000)
+      .first<{ count: number }>();
+    if ((limited?.count || 0) > 40)
+      return reply(
+        { error: 'Muitas tentativas. Aguarde alguns minutos.' },
+        429,
+      );
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM oauth_transactions WHERE expires_at<?').bind(
+        Date.now(),
+      ),
+      env.DB.prepare('DELETE FROM auth_limits WHERE expires_at<?').bind(
+        Date.now(),
+      ),
+      env.DB.prepare('INSERT INTO oauth_transactions VALUES(?,?,?,?,?)').bind(
+        await digest(state),
+        await digest(browser),
+        nonce,
+        verifier,
+        Date.now() + 600000,
+      ),
+    ]);
+    const destination = new URL(as.authorization_endpoint!);
+    destination.search = new URLSearchParams({
+      client_id: client.client_id,
+      redirect_uri: env.ENTRA_REDIRECT_URI,
+      response_type: 'code',
+      response_mode: 'query',
+      scope: 'openid profile email User.Read',
+      state,
+      nonce,
+      code_challenge: await oauth.calculatePKCECodeChallenge(verifier),
+      code_challenge_method: 'S256',
+      prompt: 'select_account',
+    }).toString();
+    return redirect(r, destination.href, [
+      cookie(r, 'forest_oauth', browser, 600),
+    ]);
   }
-  return reply({ error: 'Rota não encontrada.' }, 404);
+  let stage = 'correlation';
+  let correlated = false;
+  try {
+    const state = url.searchParams.get('state') || '',
+      browser = value(r, 'forest_oauth');
+    if (!/^[\w-]{40,128}$/.test(state) || !/^[\w-]{40,128}$/.test(browser))
+      throw new Error('correlation');
+    // DELETE RETURNING consumes the browser-bound transaction atomically, including error responses.
+    const txn = await env.DB.prepare(
+      'DELETE FROM oauth_transactions WHERE state_hash=? AND browser_hash=? AND expires_at>? RETURNING nonce,verifier',
+    )
+      .bind(await digest(state), await digest(browser), Date.now())
+      .first<{ nonce: string; verifier: string }>();
+    if (!txn) throw new Error('correlation');
+    correlated = true;
+    stage = 'authorization';
+    const params = oauth.validateAuthResponse(as, client, url, state);
+    stage = 'token_exchange';
+    const response = await oauth.authorizationCodeGrantRequest(
+      as,
+      client,
+      oauth.ClientSecretPost(env.ENTRA_CLIENT_SECRET),
+      params,
+      env.ENTRA_REDIRECT_URI,
+      txn.verifier,
+    );
+    stage = 'token_validation';
+    const tokens = await oauth.processAuthorizationCodeResponse(
+      as,
+      client,
+      response,
+      { expectedNonce: txn.nonce, requireIdToken: true },
+    );
+    stage = 'signature';
+    await oauth.validateApplicationLevelSignature(as, response);
+    stage = 'tenant';
+    const claims = oauth.getValidatedIdTokenClaims(tokens)!;
+    if (
+      claims.tid !== env.ENTRA_TENANT_ID ||
+      typeof claims.oid !== 'string' ||
+      !/^[0-9a-f-]{36}$/i.test(claims.oid)
+    )
+      throw new Error('organization');
+    // Only directory members whose identity provider belongs to this tenant may enter.
+    stage = 'identity_provider';
+    const allowedIdp = [
+      issuer,
+      `https://sts.windows.net/${env.ENTRA_TENANT_ID}/`,
+    ];
+    if (claims.idp !== undefined && !allowedIdp.includes(String(claims.idp)))
+      throw new Error('organization');
+    stage = 'directory';
+    const profileResponse = await fetch(
+      'https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName,userType,jobTitle',
+      {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (!profileResponse.ok)
+      throw new Error('directory_' + profileResponse.status);
+    const profile = (await profileResponse.json()) as {
+      id: string;
+      displayName: string;
+      mail: string | null;
+      userPrincipalName: string;
+      userType: string;
+      jobTitle: string | null;
+    };
+    stage = 'directory_policy';
+    const email = (
+      profile.mail ||
+      profile.userPrincipalName ||
+      ''
+    ).toLowerCase();
+    if (
+      profile.id !== claims.oid ||
+      profile.userType !== 'Member' ||
+      profile.userPrincipalName.toLowerCase().includes('#ext#') ||
+      !email.endsWith('@' + (env.ALLOWED_EMAIL_DOMAIN || 'forest.ind.br'))
+    )
+      throw new Error('organization');
+    stage = 'identity';
+    let identity = await env.DB.prepare(
+      'SELECT user_id FROM corporate_identities WHERE tenant_id=? AND object_id=?',
+    )
+      .bind(env.ENTRA_TENANT_ID, claims.oid)
+      .first<{ user_id: string }>();
+    const bootstrap =
+      env.ENTRA_TENANT_ID === ADMIN_TENANT && claims.oid === ADMIN_OBJECT;
+    if (!identity) {
+      const id = crypto.randomUUID();
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            `INSERT INTO users(id,name,role,job,color,access_status,is_admin) VALUES(?,?,'member',?,'#c1b4ee',?,?)`,
+          ).bind(
+            id,
+            profile.displayName || email,
+            profile.jobTitle || 'Colaborador',
+            bootstrap ? 'active' : 'pending',
+            bootstrap ? 1 : 0,
+          ),
+          env.DB.prepare(
+            'INSERT INTO corporate_identities VALUES(?,?,?,?,?)',
+          ).bind(
+            env.ENTRA_TENANT_ID,
+            claims.oid,
+            id,
+            email,
+            profile.displayName || email,
+          ),
+        ]);
+      } catch {
+        identity = await env.DB.prepare(
+          'SELECT user_id FROM corporate_identities WHERE tenant_id=? AND object_id=?',
+        )
+          .bind(env.ENTRA_TENANT_ID, claims.oid)
+          .first<{ user_id: string }>();
+        if (!identity) throw new Error('identity');
+      }
+      identity ||= { user_id: id };
+    }
+    await env.DB.prepare(
+      'UPDATE corporate_identities SET email=?,display_name=? WHERE user_id=?',
+    )
+      .bind(email, profile.displayName || email, identity.user_id)
+      .run();
+    stage = 'session';
+    const raw = random(),
+      now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        'DELETE FROM corporate_sessions WHERE expires_at<? OR last_seen_at<?',
+      ).bind(now, now - IDLE_MS),
+      env.DB.prepare('INSERT INTO corporate_sessions VALUES(?,?,?,?)').bind(
+        await digest(raw),
+        identity.user_id,
+        now + SESSION_MS,
+        now,
+      ),
+    ]);
+    return redirect(r, '/?login=success', [
+      cookie(r, 'forest_oauth', '', 0),
+      cookie(r, 'forest_corporate', raw, SESSION_MS / 1000),
+      cookie(r, 'forest_session', '', 0),
+    ]);
+  } catch (error) {
+    // Persist only allowlisted protocol metadata. Never serialize the error/cause or URL.
+    const ref = crypto.randomUUID();
+    const protocol = error as {
+      code?: unknown;
+      error?: unknown;
+      error_description?: unknown;
+    };
+    const safe = (v: unknown) =>
+      typeof v === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(v) ? v : '';
+    const errorCode =
+      safe(protocol.code) ||
+      (error instanceof Error &&
+      [
+        'correlation',
+        'organization',
+        'identity',
+        'directory_400',
+        'directory_401',
+        'directory_403',
+        'directory_429',
+      ].includes(error.message)
+        ? error.message
+        : 'unexpected');
+    const aadsts =
+      typeof protocol.error_description === 'string'
+        ? protocol.error_description.match(/AADSTS[0-9]{3,12}/)?.[0]
+        : undefined;
+    const provider = aadsts || safe(protocol.error) || null;
+    console.warn('Microsoft sign-in rejected', {
+      ref,
+      stage,
+      errorCode,
+      provider,
+    });
+    if (correlated) {
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            'INSERT INTO auth_login_failures(id,stage,error_code,provider_code) VALUES(?,?,?,?)',
+          ).bind(ref, stage, errorCode, provider),
+          env.DB.prepare(
+            "DELETE FROM auth_login_failures WHERE created_at < datetime('now','-7 days') OR id NOT IN(SELECT id FROM auth_login_failures ORDER BY rowid DESC LIMIT 500)",
+          ),
+        ]);
+      } catch {
+        console.warn('Login diagnostic could not be saved', { ref });
+      }
+    }
+    const reason =
+      stage === 'correlation'
+        ? 'session'
+        : stage === 'authorization'
+          ? 'authorization'
+          : provider === 'AADSTS7000215' || provider === 'AADSTS7000222'
+            ? 'configuration'
+            : ['tenant', 'identity_provider', 'directory_policy'].includes(
+                  stage,
+                )
+              ? 'account'
+              : 'server';
+    return redirect(r, '/?login=failed&reason=' + reason + '&ref=' + ref, [
+      cookie(r, 'forest_oauth', '', 0),
+    ]);
+  }
 }
-export async function inviteUser(
-  request: Request,
-  env: AuthEnv,
-  actor: User,
-  userId: string,
-) {
+export async function inviteUser() {
   return reply(
     {
       error:
-        'Os convites foram substituídos pelo cadastro direto com e-mail e senha.',
+        'O acesso agora é liberado pelo administrador após o login Microsoft.',
     },
     410,
   );

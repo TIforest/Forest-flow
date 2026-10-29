@@ -16,7 +16,7 @@ Quadro de planejamento semanal da equipe. Mostra o que cada pessoa está fazendo
 
 ## Positioning
 
-Uma semana por vez, por pessoa, com continuidade real: a mesma tarefa é carregada para a semana seguinte mantendo ID, prazo, comentários e histórico (não é cópia). Importação do planejamento colado em texto, sem IA nem serviço externo. Login único da equipe com escolha de perfil por nome — sem cadastro individual.
+Uma semana por vez, por pessoa, com continuidade real: a mesma tarefa é carregada para a semana seguinte mantendo ID, prazo, comentários e histórico (não é cópia). Importação do planejamento colado em texto, sem IA nem serviço externo. Login corporativo Microsoft Entra ID, com liberação de acesso e setores gerenciados pelo administrador no Forest Flow.
 
 ## Operating Context
 
@@ -28,10 +28,10 @@ Uma semana por vez, por pessoa, com continuidade real: a mesma tarefa é carrega
 
 ## Capabilities and Constraints
 
-- O redesign é só da camada visual: API (`worker/`), banco (`migrations/`), regras de permissão e textos funcionais ficam como estão. Nomes de classe e estrutura que os testes em `scripts/` tocam devem ser preservados.
-- Sem dependência externa em tempo de execução (o projeto se orgulha de não usar serviço de terceiros): fontes e ícones servidos pelo próprio app.
-- Perfis são escolhidos por nome após o login compartilhado; o histórico registra o perfil, não comprova identidade. A interface não deve sugerir autenticação individual.
-- Multi-setor é intenção confirmada, não implementada: nada na identidade visual deve ser "da TI"; o setor é um rótulo do workspace.
+- A migração corporativa adiciona autenticação Microsoft e autorização por setor. Funcionalidades de planejamento, importação e colaboração devem ser preservadas.
+- Fontes e ícones são servidos pelo próprio app. Microsoft Entra ID/Graph são usados somente para autenticação; importação permanece sem IA.
+- A identidade é individual e vem da Microsoft. Novos colaboradores informam nome, cargo e setor em um formulário; o administrador analisa a solicitação e autoriza o setor e a função. Unidade e observações são opcionais. Pedidos de correção permitem reenvio.
+- Multi-setor implementado com isolamento no servidor: um usuário pode participar de vários espaços de trabalho.
 
 ## Brand Commitments
 
@@ -50,5 +50,5 @@ Uma semana por vez, por pessoa, com continuidade real: a mesma tarefa é carrega
 1. A atividade da pessoa é o centro; tudo em volta (resumo, filtros, semana) existe para chegar nela em um olhar.
 2. Uma semana de cada vez, com a anterior e a próxima a um clique — nunca um backlog infinito.
 3. Pronto para virar um por setor: identidade do Forest Flow, setor como rótulo.
-4. Zero serviço de terceiros em runtime.
+4. Autenticação corporativa Microsoft; importação por texto sem IA.
 5. Acabamento de produto, não de template: a TI está mostrando o que sabe entregar.

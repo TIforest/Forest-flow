@@ -5,6 +5,9 @@
   "compatibility_date": "2026-10-26",
   "workers_dev": true,
   "vars": {
+    "ENTRA_REDIRECT_URI": "https://forest-flow.forestpaper.workers.dev/api/auth/microsoft/callback",
+    "ENTRA_CLIENT_ID": "98042fb3-4213-4b41-88fd-9587d2726d29",
+    "ENTRA_TENANT_ID": "0275c0a9-897a-4be2-8fa3-ec49e3be273d",
     "ALLOWED_EMAIL_DOMAIN": "forest.ind.br",
   },
   "assets": {

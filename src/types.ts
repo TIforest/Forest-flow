@@ -1,3 +1,4 @@
+export const DELETED_USER_ID = 'system-deleted-user';
 export type User = {
   id: string;
   name: string;
@@ -12,6 +13,7 @@ export type Task = {
   title: string;
   description: string;
   assignee_id: string;
+  assignee_ids: string[];
   created_by: string;
   week: string;
   due_date: string | null;

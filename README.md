@@ -1,110 +1,96 @@
 # Forest Flow
 
-Planejamento semanal da TI da Forest Paper: React, TypeScript, Tailwind, Cloudflare Workers e D1.
+Aplicativo de planejamento semanal com React, TypeScript, Cloudflare Workers e D1.
 
-## Aplicação publicada
+[Aplicação publicada](https://forest-flow.forestpaper.workers.dev).
 
-https://forest-flow.forestpaper.workers.dev
+## Acesso corporativo
 
-D1 remoto: `forest-flow`. A configuração está em `deployment/wrangler.jsonc`.
-Os integrantes e as tarefas locais existentes foram copiados para o remoto em 27/10/2026, sem contas/sessões e sem registros temporários de teste. Os dois bancos são independentes; alterações posteriores no ambiente local não sincronizam automaticamente com produção.
+A única forma de entrar é **Entrar com a Microsoft**, usando uma conta membro do tenant Forest Paper. Contas pessoais, convidados e outras organizações são rejeitadas no servidor. A identidade usa o par imutável tenant ID + object ID; nome, cargo e e-mail não concedem permissões.
 
-## Login da equipe e perfis
+O administrador principal é Bruno Rech. O bootstrap está fixado ao objeto corporativo verificado no código do servidor, e não ao primeiro login nem ao endereço escrito no e-mail. Outras pessoas preenchem um formulário após o primeiro login, com nome, cargo, setor e, opcionalmente, unidade e observações. O e-mail é confirmado pela Microsoft. As informações chegam à seção Solicitações de acesso do painel, com contador de pendências no botão Administração. O administrador pode aprovar escolhendo o setor e a função, ou solicitar correção com uma mensagem. O cadastro não concede permissões por si só. A aprovação substitui participações provisórias pelo setor explicitamente escolhido; setores adicionais podem ser associados depois. Acessos já liberados antes dessa implementação são preservados. O administrador libera o acesso, associa a um ou mais setores e escolhe a função de membro ou coordenador em cada um. Grupos do Entra e atributo de departamento não são usados nesta versão: a fonte de autorização é o cadastro administrativo do Forest Flow.
 
-A entrada usa exclusivamente **ti@forest.ind.br** e uma senha compartilhada. Após entrar, cada pessoa escolhe um perfil por nome, cargo e cor. O botão **Trocar perfil** volta à seleção sem exigir novamente a senha. O cadastro individual foi desativado.
+Coordenadores administram atividades apenas nos próprios setores. A administração global permite gerenciar todos os setores; não existe promoção para administrador pela interface. Bloqueios e remoções de participação são conferidos no D1 em cada operação. O navegador atualiza a lista de permissões a cada minuto; uma tela já carregada pode permanecer visível até essa atualização, mas suas requisições são negadas imediatamente.
 
-Todos com a senha podem selecionar qualquer perfil, inclusive a coordenação, conforme a política definida pela equipe. As permissões seguem o perfil selecionado; os registros indicam esse perfil e não comprovam a identidade da pessoa. As tarefas restritas também podem ser acessadas ao selecionar o perfil autorizado.
+## Configuração manual do Entra ID
 
-Para definir ou trocar a senha da equipe em produção, execute no terminal da pasta do projeto:
+1. Abra o registro do aplicativo no Microsoft Entra ID. Use **somente contas deste diretório organizacional**, plataforma **Web**.
+2. Client ID: 98042fb3-4213-4b41-88fd-9587d2726d29. Tenant ID: 0275c0a9-897a-4be2-8fa3-ec49e3be273d.
+3. Cadastre estes retornos Web exatamente:
+   - Produção: https://forest-flow.forestpaper.workers.dev/api/auth/microsoft/callback
+   - Local: http://localhost:5180/api/auth/microsoft/callback
+4. Permissões delegadas Microsoft Graph: **User.Read**, além dos escopos OpenID **openid**, **profile**, **email**. Não são necessárias permissões de leitura de todos os usuários/grupos, nem offline_access. Conceda consentimento administrativo se a política corporativa exigir.
+5. Crie o segredo do cliente e configure o **valor** em ENTRA_CLIENT_SECRET, exclusivamente no servidor. Não use o identificador do segredo e não o coloque no frontend, Git ou chat. Anote a expiração e renove antes de vencer.
+6. Configure ENTRA_TENANT_ID, ENTRA_CLIENT_ID e ENTRA_REDIRECT_URI no ambiente correspondente. O endereço de retorno deve ter a mesma origem do app; no desenvolvimento use **localhost**, não 127.0.0.1.
 
-```powershell
-npm.cmd run account:setup
-```
+O servidor usa Authorization Code + PKCE, state e nonce, transação de uso único vinculada ao navegador, validação de assinatura RS256 com as chaves Microsoft, issuer/audience/expiração e tenant. Consulta /me com User.Read e rejeita convidados e provedores de identidade externos. Tokens Microsoft são usados apenas durante o login; não são enviados ao frontend ou guardados no D1. A sessão do aplicativo é opaca, com apenas o hash no banco e cookie HttpOnly, Secure em produção e SameSite=Lax. Expira em oito horas ou após dez minutos sem atividade. As escritas exigem Origin da própria aplicação.
 
-O comando solicita senha e confirmação sem exibi-las (8 a 128 caracteres), grava somente salt e hash PBKDF2-SHA256 e encerra as sessões existentes. Não use a senha do Microsoft 365; defina uma senha própria para o Forest Flow. Para desenvolvimento local, use `npm.cmd run account:setup:local` após aplicar as migrações.
+## Desenvolvimento
 
-Os perfis, tarefas e contas individuais históricas são preservados. As contas e sessões antigas não autenticam mais. As sessões da equipe duram no máximo 8 horas e são encerradas pelo servidor após 10 minutos sem nenhuma chamada (qualquer uso renova o prazo); fechar a aba também exige novo login, porque a interface só reaproveita a sessão dentro da mesma aba. Os cookies são HttpOnly/SameSite=Strict/Secure em produção, a escolha de perfil é exigida no servidor e o token é renovado na troca de perfil. Não existe cadastro público da senha compartilhada.
-
-## Fluxos implementados
-
-- Minha semana, quadro da equipe, busca e filtros por responsável.
-- Cores configuráveis por integrante e gestão de cargo e perfil pela coordenação.
-- Atividades em andamento, bloqueadas ou concluídas, criadas na semana atual iniciada no domingo.
-- Colaboradores criam atividades para si; coordenadores delegam para qualquer integrante.
-- Coordenadores editam título, descrição, responsável, prazo, prioridade e visibilidade. Colaboradores editam título e descrição das tarefas que criaram e que continuam atribuídas a eles.
-- Responsável e coordenação atualizam status. Arrastar para Bloqueado abre o motivo já com foco. Enter salva, Shift+Enter insere nova linha. Alternativa ao arraste: espaço, setas, Enter; Escape cancela.
-- Exclusão com confirmação e preservação do histórico. Colaboradores excluem somente tarefas que criaram para si; a coordenação pode excluir qualquer tarefa.
-- Comentários em atividades visíveis ao integrante, com autor e horário. Enter envia e Shift+Enter insere nova linha. Atividades restritas mantêm comentários e histórico restritos.
-- Histórico de criação, alterações, exclusão e continuidade semanal.
-
-## Continuidade das semanas
-
-Na aba **Reunião semanal**, a coordenação pode selecionar tarefas não concluídas da semana anterior para incluir na semana selecionada e preparar as tarefas da próxima semana. A mesma tarefa passa a constar dos planejamentos escolhidos: ID, prazo, comentários e histórico são mantidos. Repetir a operação não duplica a tarefa.
-
-A semana original fica preservada em `tasks.week`; a participação em cada planejamento está em `task_weeks`. A reunião mostra o estado atual da tarefa, não uma fotografia imutável do status em uma reunião anterior. Não há ata automática.
-
-## Desenvolvimento local
-
-Requer Node.js 24 ou superior e npm. Clone o repositório e abra a pasta no VS Code:
-
-```powershell
-git clone https://github.com/TIforest/Forest-flow.git
-cd Forest-flow
-```
-
-Na pasta do projeto:
+Instale Node.js e execute na pasta do projeto:
 
 ```powershell
 npm.cmd install
-Copy-Item .dev.vars.example .dev.vars
+# Copie .dev.vars.example para .dev.vars e configure o segredo localmente.
 npm.cmd run db:migrate
-npm.cmd run db:seed
-npm.cmd run account:setup:local
 npm.cmd run dev
 ```
 
-Acesse a URL indicada no terminal, normalmente http://127.0.0.1:5173. Entre com ti@forest.ind.br e a senha local definida no passo account:setup:local, e selecione o perfil. As contas locais são independentes das de produção.
+Abra http://localhost:5180. O login local utiliza a mesma conta Microsoft, mas o banco local é independente da produção. Não há acesso de demonstração por cabeçalho nem login com senha própria.
 
-A seleção de perfis aparece após o login compartilhado. `LOCAL_DEMO=true` permite exclusivamente em loopback o cabeçalho de identidade usado pelos testes automatizados legados; ele não é incluído na configuração de produção. O código da interface usa cookies de sessão, não esse cabeçalho.
-
-## Verificações
+Verificações:
 
 ```powershell
 npm.cmd run typecheck
-npm.cmd run format:check
-npm.cmd run test:api
-npm.cmd run test:members
-npm.cmd run test:shared-login
+npm.cmd run test:corporate-auth
+npm.cmd run test:import-parser
+npm.cmd run build:production
 ```
 
-A suíte test:shared-login usa o servidor local na porta 5183 (ou TEST_BASE_URL), com migrações aplicadas e sem credencial compartilhada configurada. Cria e remove seus perfis e credencial de teste. Valida login, seleção, troca de perfil, bloqueio sem perfil e logout. Os testes legados test:api e test:members usam LOCAL_DEMO=true e dados de demonstração na porta 5173.
+O teste corporativo usa SQLite em memória, chaves RSA e respostas Microsoft simuladas. Testa assinatura/claims, state/nonce/PKCE, replay, contas não autorizadas, setores, coordenação, revogação, importação, vínculo histórico e preservação dos dados. Não substitui o primeiro login interativo real no tenant, que depende das políticas de consentimento/MFA do Entra.
 
-## Publicação
+## Migração e preservação
+
+Antes de aplicar 0011, exporte o D1 para um arquivo privado, fora do repositório. A migração é aditiva: cria identidades, setores, participações, sessões corporativas, transações OAuth e auditoria. As tarefas e importações existentes ficam no setor TI. Os perfis antigos e suas participações são preservados, porém ficam pendentes até receberem uma identidade corporativa e autorização. As sessões antigas são invalidadas. Tabelas de senhas antigas permanecem sem uso para facilitar recuperação; nenhuma rota aceita essas credenciais.
+
+Depois do primeiro login e do envio do formulário de cada pessoa:
+
+1. No painel **Administração**, confira a identidade Microsoft e o Object ID.
+2. Em **Vincular perfis antigos**, escolha explicitamente o perfil histórico da pessoa. Nunca confie só na semelhança de nome ou no e-mail antigo.
+3. Analise a solicitação recebida e aprove com o setor e a função autorizados. Associe outros setores em Participação nos setores, se necessário.
+
+O vínculo move a identidade e as sessões para o ID histórico, mantendo tarefas, comentários, checklists, responsáveis e eventos. O registro provisório fica marcado como mesclado. Se o perfil novo já tem tarefas, o vínculo é recusado para evitar perda de vínculos: revise os dois históricos manualmente. Bloquear uma pessoa invalida suas sessões; desativar um setor preserva todos os dados.
+
+Publicação:
 
 ```powershell
+npx.cmd wrangler secret put ENTRA_CLIENT_SECRET --config deployment/wrangler.jsonc
 npm.cmd run db:migrate:remote
 npm.cmd run deploy
 ```
 
-O build de produção usa `deployment/wrangler.jsonc`, separado do D1 local. Não executa o seed de demonstração no remoto nem inclui `.dev.vars` local. Não é necessária nenhuma configuração de envio de e-mails.
+A migração 0011 marca todas as atividades históricas como TI. Antes de reverter uma versão após criar outros setores, prepare uma recuperação que mantenha o isolamento: versões antigas não conhecem setores nem a nova autorização. Não publique um Worker antigo sobre o banco migrado sem essa revisão.
 
-## Organização
+## Importação de atividades
 
-- `src/`: interface e componentes de autenticação, comentários, equipe e continuidade.
-- `worker/`: API e autenticação, com validações e SQL parametrizado.
-- `migrations/`: estrutura versionada do D1.
-- `scripts/`: build e testes de integração.
-- `deployment/`: configuração remota.
-- `DESIGN.md` e `PRODUCT.md`: sistema visual (tokens, componentes, movimento) e verdades do produto, gerados no redesign de 27/10/2026. A fonte Sora é servida de `public/fonts`; não há serviço externo em tempo de execução.
+Importação por texto, sem IA. Aceita listas do Teams, nomes, prefixos de conversa, listas numeradas e texto livre. Mantém prévia editável antes de criar cartões; identifica datas explícitas/relativas e participantes cadastrados no setor. O prazo padrão é sete dias a partir da importação. Termos ambíguos e pessoas não reconhecidas exigem revisão.
 
-## Importação de texto
+O quadro mantém Em andamento, Bloqueado e Concluído. Arrastar para Bloqueado abre o motivo com foco. Comentários, checklist e histórico acompanham a tarefa quando ela é continuada em outra semana.
 
-No perfil de coordenação, use **Importar texto**. Cole o planejamento, prepare a prévia, revise e confirme. A importação usa exclusivamente o servidor do Forest Flow, sem IA, chaves, créditos ou serviços externos.
+## Diagnóstico do login Microsoft
 
-Formato: uma linha com 👤 Nome define o responsável; cada linha de atividade após o nome cria um cartão, com ou sem marcador -; tópicos com recuo maior viram checklist da tarefa anterior. Linhas vazias são ignoradas, assim como diferenças de caixa e acentuação nos nomes. Títulos são preservados integralmente. Status inicial Em andamento, prioridade Normal e prazo padrão de 7 dias corridos a partir da data da importação no fuso America/Sao_Paulo (segunda → próxima segunda). O prazo aparece na prévia e pode ser alterado antes da confirmação. A semana é a selecionada no quadro; ela não muda o cálculo do prazo.
+As falhas após uma transação OAuth válida recebem uma referência e são registradas em auth_login_failures por até sete dias (máximo de 500 registros). São persistidos somente referência, etapa, códigos de erro e horário. Não são guardados e-mail, token, código de autorização, segredo, resposta completa ou URL de retorno. Erros de correlação sem transação válida recebem uma mensagem de sessão expirada, sem gravar uma linha no banco.
 
-Nomes são associados por correspondência exata ou início do nome completo, apenas quando há um único resultado. Nomes ausentes ou ambíguos exigem escolha na prévia. A importação não cadastra pessoas. Linhas sem marcador antes de um cabeçalho de responsável são sinalizadas para revisão. Limites: 20.000 caracteres, 50 cartões, 180 caracteres por título, 30 etapas por cartão e 300 caracteres por etapa. Limites excedidos interrompem a preparação, sem cortar textos ou salvar tarefas parcialmente.
+AADSTS7000215 indica que a Microsoft recusou o segredo usado no servidor. No registro do aplicativo, em Certificados e segredos, copie o campo **Valor** do segredo, não seu **ID**. Se o valor não estiver mais disponível, crie um novo segredo e configure-o pelo prompt interativo do Wrangler, sem colá-lo em argumentos do comando, no chat ou no Git:
 
-A prévia permite editar título, responsável, descrição, prazo, prioridade, status e checklist, além de desmarcar cartões. Alertas de duplicação comparam título normalizado e responsável entre as atividades existentes na semana. A confirmação grava tarefas, etapas, vínculos semanais e eventos em um lote atômico; o ID de importação impede repetir a mesma confirmação. Os dados históricos de importações anteriores são preservados.
+```powershell
+npx.cmd wrangler secret put ENTRA_CLIENT_SECRET --config deployment/wrangler.jsonc
+```
 
-O checklist pode ser atualizado pelo responsável ou coordenação, respeitando a visibilidade de tarefas restritas e registrando histórico. Testes: `npm.cmd run test:import-parser` valida o exemplo de 21 cartões e o formato; `npm.cmd run test:import-api` usa o servidor local na porta 5184 com LOCAL_DEMO=true, cria e remove apenas seus dados de teste e verifica prévia, confirmação, permissões e checklist.
+Essa alteração atualiza o segredo em produção sem exigir novo build do frontend. Para desenvolvimento, configure separadamente ENTRA_CLIENT_SECRET em .dev.vars. Após configurar, teste um novo login completo pelo botão Microsoft; não reutilize URLs antigas de retorno.
+
+## Exclusão permanente de perfis
+
+Em Administração → Pessoas e liberação de acesso, o administrador pode clicar em Excluir perfil. A confirmação mostra os vínculos existentes e exige digitar o nome completo. O perfil, a identidade Microsoft, as sessões, as participações, o formulário e as credenciais antigas vinculadas ao ID são removidos do banco. Tarefas, comentários, etapas e históricos permanecem; as referências à pessoa passam a uma identificação interna sem acesso, chamada Usuário excluído. O conteúdo livre de comentários e descrições é preservado e não passa por remoção automática de nomes escritos no texto.
+
+A exclusão ocorre em uma transação: se algum vínculo impedir a operação, nenhuma alteração é aplicada. O administrador principal e a identificação histórica não podem ser excluídos. Uma pessoa excluída que volte a entrar com a Microsoft gera um novo cadastro pendente, sem recuperar as permissões anteriores. Para impedir futuras solicitações, utilize Bloquear em vez de excluir.
