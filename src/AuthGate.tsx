@@ -23,6 +23,24 @@ type Session = {
   workspaces?: Workspace[];
   error?: string;
 };
+// A sessão só é reaproveitada dentro da mesma aba: fechar a aba exige entrar
+// de novo (pela Microsoft, sem senha quando a conta já está conectada).
+const TAB_KEY = 'forest-flow-tab';
+function tabOpen() {
+  try {
+    return sessionStorage.getItem(TAB_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function markTab(open: boolean) {
+  try {
+    if (open) sessionStorage.setItem(TAB_KEY, '1');
+    else sessionStorage.removeItem(TAB_KEY);
+  } catch {
+    /* sem armazenamento a sessão não é reaproveitada */
+  }
+}
 export function AuthGate({
   children,
 }: {
@@ -35,8 +53,13 @@ export function AuthGate({
   const [session, setSession] = useState<Session>({}),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
+    [notice, setNotice] = useState(''),
     [selected, setSelected] = useState(''),
-    [admin, setAdmin] = useState(false);
+    [admin, setAdmin] = useState(false),
+    // Voltando da Microsoft: a luminária já entra acesa enquanto carrega.
+    [returning] = useState(
+      () => new URLSearchParams(location.search).get('login') === 'success',
+    );
   async function load() {
     const r = await fetch('/api/auth/me');
     const data = (await r.json()) as Session;
@@ -52,9 +75,11 @@ export function AuthGate({
   }
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
+    markTab(false);
     setSession({});
     setAdmin(false);
     setSelected('');
+    setNotice('');
   }
   useEffect(() => {
     const query = new URLSearchParams(location.search);
@@ -78,6 +103,7 @@ export function AuthGate({
           (/^[0-9a-f-]{36}$/.test(ref) ? ' Referência: ' + ref : ''),
       );
     }
+    const fresh = query.get('login') === 'success';
     if (query.has('login')) {
       query.delete('login');
       query.delete('reason');
@@ -88,12 +114,16 @@ export function AuthGate({
         location.pathname + (query.size ? '?' + query : '') + location.hash,
       );
     }
-    void load()
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+    if (fresh) markTab(true);
+    if (fresh || tabOpen())
+      void load()
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false));
+    else setLoading(false);
     const expired = () => {
+      markTab(false);
       setSession({});
-      setError('Sua sessão foi encerrada. Entre novamente.');
+      setNotice('Sua sessão foi encerrada. Entre novamente.');
     };
     addEventListener('forest-session-expired', expired);
     return () => removeEventListener('forest-session-expired', expired);
@@ -109,7 +139,9 @@ export function AuthGate({
     const timer = setInterval(() => {
       if (Date.now() - last >= 600000) {
         void logout();
-        setError('Sessão encerrada após 10 minutos sem atividade.');
+        setNotice(
+          'Você foi desconectado após 10 minutos sem atividade. Entre de novo para continuar.',
+        );
       }
     }, 15000);
     // Refresh permissions even when a workspace is open: revoked access must leave the screen.
@@ -123,10 +155,21 @@ export function AuthGate({
       events.forEach((e) => removeEventListener(e, touch));
     };
   }, [session.authenticated]);
+  const lamp = (
+    <div className="lamp" aria-hidden="true">
+      <i className="lamp-cord" />
+      <i className="lamp-shade" />
+      <i className="lamp-bulb" />
+      <i className="lamp-glow" />
+    </div>
+  );
   if (loading)
     return (
-      <div className="auth-shell">
-        <p role="status">Conectando ao Forest Flow…</p>
+      <div className={'auth-shell' + (returning ? ' is-lit' : '')}>
+        {lamp}
+        <p className="auth-status" role="status">
+          Conectando ao Forest Flow…
+        </p>
       </div>
     );
   const user = session.user,
@@ -210,11 +253,12 @@ export function AuthGate({
       </>
     );
   return (
-    <div className="auth-shell">
+    <div className={'auth-shell' + (user ? ' is-lit' : '')}>
       <div className="ambient" aria-hidden="true">
         <i />
         <i />
       </div>
+      {lamp}
       <div className="auth-card">
         <div className="brand">
           <Brand />
@@ -227,6 +271,11 @@ export function AuthGate({
               : `Olá, ${user.name}. Seu login Microsoft foi confirmado. O administrador precisa liberar seu acesso e associar você a um setor.`
             : 'Use sua conta corporativa da Forest Paper.'}
         </p>
+        {notice && !user && (
+          <div className="auth-notice" role="status">
+            {notice}
+          </div>
+        )}
         {error && (
           <div className="error" role="alert">
             {error}
@@ -249,6 +298,7 @@ export function AuthGate({
           <a
             className="primary microsoft-login"
             href="/api/auth/microsoft/start"
+            onClick={() => markTab(true)}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
               <path fill="#f25022" d="M0 0h9v9H0z" />
