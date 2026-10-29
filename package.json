@@ -18,7 +18,9 @@
     "deploy": "npm run build:production && wrangler deploy --config dist/forest_flow/wrangler.json",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote --config deployment/wrangler.jsonc",
     "test:import-parser": "node scripts/check-import-parser.mjs",
-    "test:corporate-auth": "node scripts/check-corporate-auth.mjs"
+    "test:corporate-auth": "node scripts/check-corporate-auth.mjs",
+    "test:web-push": "node scripts/check-web-push.mjs",
+    "test:deadline-reminders": "node scripts/check-deadline-reminders.mjs"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.65.0",

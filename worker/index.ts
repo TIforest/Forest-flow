@@ -1,10 +1,23 @@
 import { DELETED_USER_ID } from '../src/types';
+import { enqueueDeadlineReminders } from './deadline-reminders';
+import {
+  notificationsRoute,
+  taskNotices,
+  deliverNotifications,
+  type NotificationEnv,
+} from './notifications';
+import {
+  taskTitleKey,
+  titleExists,
+  isDuplicateTitleError,
+  duplicateTitleMessage,
+} from './task-title';
 import { onboardingRoute } from './onboarding';
 import type { User, Task, Status } from '../src/types';
 import { authRoute, getActor, getAccount, type AuthEnv } from './auth';
 import { adminRoute } from './admin';
 import { importRoute, type ImportEnv } from './imports';
-interface Env extends AuthEnv, ImportEnv {}
+interface Env extends AuthEnv, ImportEnv, NotificationEnv {}
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 const date = /^\d{4}-\d{2}-\d{2}$/;
@@ -54,7 +67,7 @@ async function usersExist(db: D1Database, ids: string[], workspace: string) {
 }
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
-export default {
+const app = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/'))
@@ -65,6 +78,8 @@ export default {
     )
       return json({ error: 'Origem inválida.' }, 403);
     try {
+      const notifications = await notificationsRoute(request, env);
+      if (notifications) return notifications;
       const onboarding = await onboardingRoute(request, env);
       if (onboarding) return onboarding;
       const auth = await authRoute(request, env);
@@ -95,7 +110,7 @@ export default {
         return json(
           (
             await env.DB.prepare(
-              "SELECT u.id,u.name,u.job,u.color,u.registration_email,m.role FROM users u JOIN workspace_memberships m ON m.user_id=u.id WHERE m.workspace_id=? AND u.access_status!='merged' ORDER BY u.name",
+              "SELECT u.id,u.name,coalesce(nullif(p.job,''),u.job) AS job,u.color,u.microsoft_photo,u.registration_email,m.role FROM users u JOIN workspace_memberships m ON m.user_id=u.id LEFT JOIN workspace_member_profiles p ON p.user_id=m.user_id AND p.workspace_id=m.workspace_id WHERE m.workspace_id=? AND u.access_status!='merged' ORDER BY u.name",
             )
               .bind(actor.workspace_id)
               .all()
@@ -146,9 +161,11 @@ export default {
         if (!(await usersExist(env.DB, assignees, actor.workspace_id)))
           return json({ error: 'Responsável inválido.' }, 400);
         const id = crypto.randomUUID();
+        if (await titleExists(env.DB, actor.workspace_id, b.title))
+          return json({ error: duplicateTitleMessage }, 409);
         await env.DB.batch([
           env.DB.prepare(
-            'INSERT INTO tasks (id,title,description,assignee_id,created_by,week,due_date,priority,restricted,workspace_id) VALUES (?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO tasks (id,title,description,assignee_id,created_by,week,due_date,priority,restricted,workspace_id,title_key) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
           ).bind(
             id,
             b.title.trim(),
@@ -160,6 +177,7 @@ export default {
             b.priority,
             b.restricted ? 1 : 0,
             actor.workspace_id,
+            taskTitleKey(b.title),
           ),
           env.DB.prepare(
             'INSERT INTO events (id,task_id,actor_id,message) VALUES (?,?,?,?)',
@@ -174,6 +192,14 @@ export default {
                 'INSERT INTO task_assignees(task_id,user_id) VALUES (?,?)',
               ).bind(id, userId),
             ),
+          ...taskNotices(
+            env.DB,
+            assignees,
+            actor.id,
+            id,
+            actor.workspace_id,
+            b.title.trim(),
+          ),
         ]);
         return json({ id }, 201);
       }
@@ -341,11 +367,20 @@ export default {
                 { error: 'Escreva um comentário de até 3.000 caracteres.' },
                 400,
               );
-            await env.DB.prepare(
-              'INSERT INTO comments(id,task_id,author_id,body) VALUES (?,?,?,?)',
-            )
-              .bind(crypto.randomUUID(), task.id, actor.id, b.body.trim())
-              .run();
+            await env.DB.batch([
+              env.DB.prepare(
+                'INSERT INTO comments(id,task_id,author_id,body) VALUES (?,?,?,?)',
+              ).bind(crypto.randomUUID(), task.id, actor.id, b.body.trim()),
+              ...taskNotices(
+                env.DB,
+                [task.created_by, ...task.assignee_ids],
+                actor.id,
+                task.id,
+                actor.workspace_id,
+                task.title,
+                'comment',
+              ),
+            ]);
             return json({ ok: true }, 201);
           }
         }
@@ -486,6 +521,16 @@ export default {
             const assigneesChanged =
               nextAssignees.join() !== task.assignee_ids.join();
             if (assigneesChanged) {
+              statements.push(
+                ...taskNotices(
+                  env.DB,
+                  nextAssignees.filter((id) => !task.assignee_ids.includes(id)),
+                  actor.id,
+                  task.id,
+                  actor.workspace_id,
+                  d.title,
+                ),
+              );
               const names = (
                 await env.DB.prepare(
                   `SELECT id,name FROM users WHERE id IN (${[...new Set([...task.assignee_ids, ...nextAssignees])].map(() => '?').join(',')})`,
@@ -515,9 +560,13 @@ export default {
               );
             }
             if (changed.length) {
+              if (
+                await titleExists(env.DB, actor.workspace_id, d.title, task.id)
+              )
+                return json({ error: duplicateTitleMessage }, 409);
               statements.push(
                 env.DB.prepare(
-                  'UPDATE tasks SET title=?,description=?,assignee_id=?,due_date=?,priority=?,restricted=? WHERE id=?',
+                  'UPDATE tasks SET title=?,description=?,assignee_id=?,due_date=?,priority=?,restricted=?,title_key=? WHERE id=?',
                 ).bind(
                   d.title.trim(),
                   d.description,
@@ -525,6 +574,7 @@ export default {
                   d.due_date || null,
                   d.priority,
                   d.restricted ? 1 : 0,
+                  taskTitleKey(d.title),
                   task.id,
                 ),
               );
@@ -550,16 +600,53 @@ export default {
                 );
             }
           }
+          if (nextStatus !== task.status)
+            statements.push(
+              ...taskNotices(
+                env.DB,
+                [task.created_by, ...task.assignee_ids],
+                actor.id,
+                task.id,
+                actor.workspace_id,
+                task.title,
+                'status',
+              ),
+            );
           await env.DB.batch(statements);
           return json({ ok: true });
         }
       }
       return json({ error: 'Rota não encontrada.' }, 404);
     } catch (error) {
+      if (isDuplicateTitleError(error))
+        return json({ error: duplicateTitleMessage }, 409);
       if (error instanceof SyntaxError)
         return json({ error: 'Dados inválidos.' }, 400);
       console.error(error);
       return json({ error: 'Não foi possível processar a solicitação.' }, 500);
     }
+  },
+} satisfies ExportedHandler<Env>;
+export default {
+  async fetch(r: Request, env: Env, ctx: ExecutionContext) {
+    const response = await app.fetch(r, env);
+    if (ctx && response.ok && ['POST', 'PATCH'].includes(r.method))
+      ctx.waitUntil(deliverNotifications(env).catch(() => undefined));
+    return response;
+  },
+  async scheduled(
+    _event: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ) {
+    ctx.waitUntil(
+      (async () => {
+        await enqueueDeadlineReminders(env);
+        await deliverNotifications(env);
+        await env.DB.prepare(
+          "DELETE FROM notifications WHERE created_at<datetime('now','-90 days')",
+        ).run();
+      })(),
+    );
   },
 } satisfies ExportedHandler<Env>;

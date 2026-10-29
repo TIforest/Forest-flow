@@ -1,4 +1,5 @@
 import type { Actor } from './auth';
+import { taskNotices } from './notifications';
 import type { User } from '../src/types';
 import type { ImportTask, ImportPreview } from '../src/import-types';
 import { parsePlanning } from './planning-parser';
@@ -83,28 +84,19 @@ export async function importRoute(
     }
     const existing = (
       await env.DB.prepare(
-        'SELECT title,assignee_id FROM tasks JOIN task_weeks ON task_weeks.task_id=tasks.id WHERE tasks.workspace_id=? AND task_weeks.week=? AND deleted_at IS NULL',
+        'SELECT title,assignee_id FROM tasks WHERE tasks.workspace_id=? AND deleted_at IS NULL',
       )
-        .bind(actor.workspace_id, b.week)
+        .bind(actor.workspace_id)
         .all<{ title: string; assignee_id: string }>()
     ).results;
-    const normalize = (s: string) =>
-      s
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, ' ')
-        .trim();
+    const seen = new Set(existing.map((e) => taskTitleKey(e.title)));
     const duplicates = preview.tasks
-      .map((t, i) =>
-        existing.some(
-          (e) =>
-            e.assignee_id === t.assignee_id &&
-            normalize(e.title) === normalize(t.title),
-        )
-          ? i
-          : -1,
-      )
+      .map((t, i) => {
+        const key = taskTitleKey(t.title);
+        const duplicate = seen.has(key);
+        seen.add(key);
+        return duplicate ? i : -1;
+      })
       .filter((i) => i >= 0);
     return reply({ ...preview, duplicates, importId: crypto.randomUUID() });
   }
@@ -174,6 +166,19 @@ export async function importRoute(
   };
   const previous = await replay();
   if (previous) return previous;
+  const existingTitles = await env.DB.prepare(
+    'SELECT title FROM tasks WHERE workspace_id=? AND deleted_at IS NULL',
+  )
+    .bind(actor.workspace_id)
+    .all<{ title: string }>();
+  const seen = new Set(
+    existingTitles.results.map((t) => taskTitleKey(t.title)),
+  );
+  for (const t of tasks) {
+    const key = taskTitleKey(t.title);
+    if (seen.has(key)) return reply({ error: duplicateTitleMessage }, 409);
+    seen.add(key);
+  }
   const statements = [
     env.DB.prepare(
       'INSERT INTO task_imports(id,actor_id,payload_hash,task_count) VALUES (?,?,?,?)',
@@ -183,7 +188,7 @@ export async function importRoute(
     const id = crypto.randomUUID();
     statements.push(
       env.DB.prepare(
-        'INSERT INTO tasks(id,title,description,assignee_id,created_by,week,due_date,priority,status,block_reason,completed_at,checklist,workspace_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO tasks(id,title,description,assignee_id,created_by,week,due_date,priority,status,block_reason,completed_at,checklist,workspace_id,title_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       ).bind(
         id,
         t.title,
@@ -204,10 +209,19 @@ export async function importRoute(
           })),
         ),
         actor.workspace_id,
+        taskTitleKey(t.title),
       ),
       env.DB.prepare(
         'INSERT INTO task_weeks(task_id,week,added_by) VALUES (?,?,?)',
       ).bind(id, b.week, actor.id),
+      ...taskNotices(
+        env.DB,
+        [t.assignee_id!, ...t.extra_assignee_ids],
+        actor.id,
+        id,
+        actor.workspace_id,
+        t.title,
+      ),
       ...t.extra_assignee_ids.map((userId) =>
         env.DB.prepare(
           'INSERT INTO task_assignees(task_id,user_id) VALUES (?,?)',
@@ -228,7 +242,14 @@ export async function importRoute(
   } catch (e) {
     const concurrent = await replay();
     if (concurrent) return concurrent;
+    if (isDuplicateTitleError(e))
+      return reply({ error: duplicateTitleMessage }, 409);
     throw e;
   }
   return reply({ count: tasks.length }, 201);
 }
+import {
+  taskTitleKey,
+  isDuplicateTitleError,
+  duplicateTitleMessage,
+} from './task-title';

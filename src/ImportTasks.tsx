@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { taskTitleKey } from './task-title';
 import { statuses, type User } from './types';
 import type { ImportTask, ImportPreview } from './import-types';
 type Draft = ImportTask & { selected: boolean; duplicate: boolean };
@@ -33,6 +34,9 @@ export function ImportTasks({
     return () => previous?.focus();
   }, []);
   const selected = drafts?.filter((t) => t.selected) || [];
+  const repeatedTitles =
+    new Set(selected.map((t) => taskTitleKey(t.title))).size !==
+    selected.length;
   function update(index: number, patch: Partial<Draft>) {
     setDrafts((current) =>
       current!.map((t, i) => (i === index ? { ...t, ...patch } : t)),
@@ -85,7 +89,11 @@ export function ImportTasks({
       await created(result.count);
     } catch (e) {
       setError((e as Error).message);
-      setRetry(true);
+      setRetry(
+        !(e as Error).message.includes(
+          'Já existe uma atividade com esse título',
+        ),
+      );
     } finally {
       lock.current = false;
       setBusy(false);
@@ -186,6 +194,12 @@ export function ImportTasks({
                 </strong>{' '}
                 · Edite os campos e desmarque o que não deseja importar.
               </p>
+              {repeatedTitles && (
+                <p className="import-warning" role="alert">
+                  Há títulos repetidos entre os cartões selecionados. Altere os
+                  títulos ou desmarque os repetidos.
+                </p>
+              )}
               {warnings.length > 0 && (
                 <div className="import-warning" role="status">
                   <strong>Pontos para revisar</strong>
@@ -220,8 +234,9 @@ export function ImportTasks({
                   </label>
                   {t.duplicate && (
                     <p className="import-warning">
-                      Já existe um cartão com o mesmo título e responsável nesta
-                      semana. Desmarcado para revisão.
+                      Título repetido no setor ou neste lote, independentemente
+                      da semana e do responsável. Desmarcado para revisão;
+                      altere o título antes de incluir.
                     </p>
                   )}
                   {!t.assignee_id && (
@@ -363,16 +378,6 @@ export function ImportTasks({
                         }
                       />
                     </label>
-                    <label>
-                      Checklist · uma etapa por linha
-                      <textarea
-                        rows={Math.max(2, Math.min(t.checklist.length + 1, 5))}
-                        value={t.checklist.join('\n')}
-                        onChange={(e) =>
-                          update(i, { checklist: e.target.value.split('\n') })
-                        }
-                      />
-                    </label>
                   </fieldset>
                 </article>
               ))}
@@ -420,6 +425,7 @@ export function ImportTasks({
                 data-busy={busy || undefined}
                 disabled={
                   busy ||
+                  repeatedTitles ||
                   !selected.length ||
                   selected.some(
                     (t) =>

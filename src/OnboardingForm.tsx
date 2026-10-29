@@ -176,7 +176,7 @@ export function OnboardingForm({
           </form>
         )}
         <button
-          className="auth-link"
+          className="auth-link onboarding-logout"
           onClick={() => void logout().catch((e) => setError(e.message))}
         >
           Sair

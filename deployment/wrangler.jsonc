@@ -3,6 +3,7 @@
   "name": "forest-flow",
   "main": "../worker/index.ts",
   "compatibility_date": "2026-10-26",
+  "triggers": { "crons": ["* * * * *"] },
   "workers_dev": true,
   "vars": {
     "ENTRA_REDIRECT_URI": "https://forest-flow.forestpaper.workers.dev/api/auth/microsoft/callback",

@@ -17,7 +17,7 @@ const temporary = mkdtempSync(join(tmpdir(), 'forest-auth-check-'));
 const bundle = join(temporary, 'worker.mjs');
 await build({
   stdin: {
-    contents: `export {default} from './worker/index.ts'; export {ADMIN_OBJECT,ADMIN_TENANT} from './worker/auth.ts';`,
+    contents: `export {default} from './worker/index.ts'; export {ADMIN_OBJECT,ADMIN_TENANT} from './worker/auth.ts'; export {deliverNotifications} from './worker/notifications.ts';`,
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -30,6 +30,7 @@ const {
   default: worker,
   ADMIN_OBJECT,
   ADMIN_TENANT,
+  deliverNotifications,
 } = await import(pathToFileURL(bundle));
 const sqlite = new DatabaseSync(':memory:');
 const files = readdirSync('migrations')
@@ -48,7 +49,7 @@ const snapshot = () =>
       sqlite
         .prepare('SELECT * FROM ' + t)
         .all()
-        .map(({ workspace_id, ...row }) => row),
+        .map(({ workspace_id, title_key, ...row }) => row),
     ),
   );
 const before = snapshot();
@@ -116,8 +117,34 @@ let claims = {},
   tokenNonce = '',
   tamper = false;
 const originalFetch = globalThis.fetch;
+const photoBytes = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5QAAAABJRU5ErkJggg==',
+  'base64',
+);
+let photoMode = 'valid';
+let pushCalls = 0,
+  pushStatus = 201;
 globalThis.fetch = async (input, init) => {
   const url = String(input);
+  if (url.startsWith('https://fcm.googleapis.com/fcm/send/')) {
+    assert.equal(
+      init.redirect,
+      'manual',
+      'Cloudflare Workers does not support redirect:error',
+    );
+    pushCalls++;
+    return new Response(null, { status: pushStatus });
+  }
+  if (url === 'https://graph.microsoft.com/v1.0/me/photos/96x96/$value') {
+    assert.equal(init.headers.Authorization, 'Bearer test-access-token');
+    if (photoMode === 'missing') return new Response(null, { status: 404 });
+    if (photoMode === 'failure') return new Response(null, { status: 503 });
+    if (photoMode === 'html') return new Response('<svg onload="alert(1)"/>');
+    if (photoMode === 'oversized') return new Response(new Uint8Array(65537));
+    return new Response(photoBytes, {
+      headers: { 'Content-Type': 'image/png' },
+    });
+  }
   if (url.endsWith('/keys')) return Response.json({ keys: [jwk] });
   if (url.endsWith('/token')) {
     if (claims.test_token_error)
@@ -286,6 +313,25 @@ try {
   assert.equal(me.data.user.is_admin, 1);
   assert.notEqual(me.data.user.id, 'legacy');
   const adminId = me.data.user.id;
+  const expectedPhoto =
+    'data:image/png;base64,' + photoBytes.toString('base64');
+  assert.equal(me.data.user.microsoft_photo, expectedPhoto);
+  for (const mode of ['failure', 'html', 'oversized']) {
+    photoMode = mode;
+    await login(ADMIN_OBJECT, 'bruno.rech@forest.ind.br');
+    assert.equal(
+      (await call('/api/auth/me', { cookie: admin })).data.user.microsoft_photo,
+      expectedPhoto,
+    );
+  }
+  photoMode = 'missing';
+  await login(ADMIN_OBJECT, 'bruno.rech@forest.ind.br');
+  assert.equal(
+    (await call('/api/auth/me', { cookie: admin })).data.user.microsoft_photo,
+    null,
+  );
+  photoMode = 'valid';
+  await login(ADMIN_OBJECT, 'bruno.rech@forest.ind.br');
   assert.equal(
     (
       await call('/api/auth/login', {
@@ -339,6 +385,18 @@ try {
     400,
   );
   assert.equal((await post('auth/onboarding', form, spoof)).status, 201);
+  assert.equal(
+    (
+      await call('/api/notifications', { cookie: admin })
+    ).data.notifications.filter((n) => n.kind === 'access_request').length,
+    1,
+  );
+  assert.equal(
+    (
+      await call('/api/notifications', { cookie: spoof })
+    ).data.notifications.some((n) => n.kind === 'access_request'),
+    false,
+  );
   me = await call('/api/auth/me', { cookie: spoof });
   assert.equal(me.data.user.access_status, 'pending');
   assert.equal(me.data.user.is_admin, 0);
@@ -471,9 +529,661 @@ try {
     priority: 'normal',
     restricted: false,
   };
+  // Administration is scoped on the server, including requests made manually.
+  {
+    sqlite.exec(`INSERT INTO users(id,name,role,job,color,access_status,onboarding_required) VALUES
+      ('scope-member','Integrante Escopo','member','Cargo global','#c1b4ee','active',0),
+      ('scope-outsider','Externo Escopo','member','RH','#c1b4ee','active',0),
+      ('scope-pending','Pendente Escopo','member','RH','#c1b4ee','pending',1);
+      INSERT INTO corporate_identities VALUES
+      ('${ADMIN_TENANT}','b101abca-1111-4111-8111-111111111111','scope-member','scope.member@forest.ind.br','Integrante Escopo'),
+      ('${ADMIN_TENANT}','scope-outsider','scope-outsider','scope.outsider@forest.ind.br','Externo Escopo'),
+      ('${ADMIN_TENANT}','scope-pending','scope-pending','scope.pending@forest.ind.br','Pendente Escopo');
+      INSERT INTO workspace_memberships VALUES('ti','scope-member','member'),('ti','scope-outsider','member');`);
+    let limited = await call('/api/admin/state', { cookie: spoof });
+    assert.equal(limited.status, 200);
+    assert.equal(limited.data.scope, 'sector');
+    assert.deepEqual(
+      limited.data.workspaces.map((w) => w.id),
+      [finance],
+    );
+    assert.deepEqual(
+      limited.data.users.map((u) => u.id),
+      [memberId],
+    );
+    assert.deepEqual(limited.data.requests, []);
+    for (const path of [
+      'workspace',
+      'review',
+      'access',
+      'link',
+      'administrator',
+      'profile-deletion',
+    ]) {
+      assert.equal(
+        (
+          await post(
+            'admin/' + path,
+            {
+              user_id: 'scope-member',
+              workspace_id: finance,
+              is_admin: true,
+              confirm: true,
+            },
+            spoof,
+          )
+        ).status,
+        403,
+        path,
+      );
+    }
+    assert.equal(
+      (
+        await call('/api/admin/profile-deletion?user_id=scope-outsider', {
+          cookie: spoof,
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          { user_id: 'scope-member', workspace_id: 'ti', role: 'remove' },
+          spoof,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          {
+            user_id: 'scope-member',
+            workspace_id: finance,
+            role: 'coordinator',
+          },
+          spoof,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          { user_id: memberId, workspace_id: finance, role: 'remove' },
+          spoof,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          { user_id: 'scope-pending', workspace_id: finance, role: 'member' },
+          spoof,
+        )
+      ).status,
+      409,
+    );
+    const candidates = await call('/api/admin/candidates?q=Escopo', {
+      cookie: spoof,
+    });
+    assert.equal(candidates.status, 200);
+    assert.equal(candidates.data.users.length, 2);
+    assert.deepEqual(Object.keys(candidates.data.users[0]).sort(), [
+      'email',
+      'id',
+      'name',
+    ]);
+    assert.equal(
+      (await call('/api/admin/candidates?q=%25%25', { cookie: spoof })).data
+        .users.length,
+      0,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          { user_id: 'scope-member', workspace_id: finance, role: 'member' },
+          spoof,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/member-profile',
+          {
+            user_id: 'scope-member',
+            workspace_id: finance,
+            job: 'Analista financeiro',
+          },
+          spoof,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      sqlite.prepare("SELECT job FROM users WHERE id='scope-member'").get().job,
+      'Cargo global',
+    );
+    assert.equal(
+      (
+        await call('/api/users', { cookie: spoof, workspace: finance })
+      ).data.find((u) => u.id === 'scope-member').job,
+      'Analista financeiro',
+    );
+    assert.equal(
+      (await call('/api/users', { cookie: admin, workspace: 'ti' })).data.find(
+        (u) => u.id === 'scope-member',
+      ).job,
+      'Cargo global',
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/member-profile',
+          { user_id: 'scope-outsider', workspace_id: 'ti', job: 'Indevido' },
+          spoof,
+        )
+      ).status,
+      403,
+    );
+    limited = (await call('/api/admin/state', { cookie: spoof })).data;
+    assert.ok(!limited.users.some((u) => u.id === 'scope-outsider'));
+    assert.ok(limited.memberships.every((m) => m.workspace_id === finance));
+    assert.ok(limited.audit.length >= 2);
+    assert.ok(
+      limited.audit.every(
+        (a) => JSON.parse(a.details).workspace_id === finance,
+      ),
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          { user_id: 'scope-member', workspace_id: finance, role: 'remove' },
+          spoof,
+        )
+      ).status,
+      200,
+    );
+    assert.ok(
+      sqlite
+        .prepare(
+          "SELECT user_id FROM workspace_memberships WHERE user_id='scope-member' AND workspace_id='ti'",
+        )
+        .get(),
+    );
+    assert.equal(
+      sqlite
+        .prepare(
+          "SELECT count(*) n FROM workspace_member_profiles WHERE user_id='scope-member'",
+        )
+        .get().n,
+      0,
+    );
+    assert.equal(
+      (
+        await post('admin/administrator', {
+          user_id: 'scope-pending',
+          is_admin: true,
+          confirm: true,
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await post('admin/administrator', {
+          user_id: 'scope-member',
+          is_admin: true,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post('admin/administrator', {
+          user_id: 'scope-member',
+          is_admin: true,
+          confirm: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      sqlite.prepare("SELECT is_admin FROM users WHERE id='scope-member'").get()
+        .is_admin,
+      1,
+    );
+    assert.equal(
+      (
+        await post('admin/administrator', {
+          user_id: adminId,
+          is_admin: false,
+          confirm: true,
+        })
+      ).status,
+      409,
+    );
+    // A delegated administrator is global without changing their sector roles.
+    const delegated = await login(
+      'b101abca-1111-4111-8111-111111111111',
+      'scope.member@forest.ind.br',
+    );
+    assert.equal(
+      (await call('/api/admin/state', { cookie: delegated })).data.scope,
+      'global',
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/administrator',
+          { user_id: adminId, is_admin: false, confirm: true },
+          delegated,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/administrator',
+          { user_id: 'scope-member', is_admin: false, confirm: true },
+          delegated,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await post('admin/administrator', {
+          user_id: 'scope-member',
+          is_admin: false,
+          confirm: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await call('/api/admin/state', { cookie: delegated })).status,
+      403,
+    );
+    assert.ok(
+      sqlite
+        .prepare(
+          "SELECT user_id FROM workspace_memberships WHERE user_id='scope-member' AND workspace_id='ti'",
+        )
+        .get(),
+    );
+    // A coordinator can administer several authorized sectors, then loses it immediately.
+    await post('admin/membership', {
+      user_id: memberId,
+      workspace_id: 'ti',
+      role: 'coordinator',
+    });
+    assert.equal(
+      (await call('/api/admin/state', { cookie: spoof })).data.workspaces
+        .length,
+      2,
+    );
+    await post('admin/membership', {
+      user_id: memberId,
+      workspace_id: 'ti',
+      role: 'remove',
+    });
+    await post('admin/membership', {
+      user_id: memberId,
+      workspace_id: finance,
+      role: 'member',
+    });
+    assert.equal(
+      (await call('/api/admin/state', { cookie: spoof })).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          'admin/membership',
+          { user_id: 'scope-member', workspace_id: finance, role: 'member' },
+          spoof,
+        )
+      ).status,
+      403,
+    );
+    await post('admin/membership', {
+      user_id: memberId,
+      workspace_id: finance,
+      role: 'coordinator',
+    });
+  }
   const created = await post('tasks', task, spoof, finance);
   assert.equal(created.status, 201, JSON.stringify(created.data));
   const taskId = created.data.id;
+  // Notification recipients, visibility, read isolation and queued delivery.
+  {
+    assert.equal((await call('/api/notifications')).status, 401);
+    assert.equal(
+      sqlite
+        .prepare('SELECT count(*) n FROM notifications WHERE task_id=?')
+        .get(taskId).n,
+      0,
+      'Do not notify self-assignment',
+    );
+    const noticeTask = await post(
+      'tasks',
+      { ...task, title: 'Teste de notificação privada', restricted: true },
+      admin,
+      finance,
+    );
+    assert.equal(noticeTask.status, 201);
+    let feed = (await call('/api/notifications', { cookie: spoof })).data;
+    const notice = feed.notifications.find(
+      (n) => n.task_id === noticeTask.data.id,
+    );
+    assert.ok(notice);
+    assert.equal(notice.kind, 'assignment');
+    assert.ok(
+      !(
+        await call('/api/notifications', { cookie: admin })
+      ).data.notifications.some((n) => n.id === notice.id),
+      'Admin inbox only shows own notifications',
+    );
+    await post('notifications/read', { id: notice.id }, admin);
+    assert.equal(
+      sqlite
+        .prepare('SELECT read_at FROM notifications WHERE id=?')
+        .get(notice.id).read_at,
+      null,
+    );
+    await post(
+      'tasks/' + noticeTask.data.id + '/comments',
+      { body: 'Comentário de teste' },
+      admin,
+      finance,
+    );
+    assert.ok(
+      (
+        await call('/api/notifications', { cookie: spoof })
+      ).data.notifications.some(
+        (n) => n.task_id === noticeTask.data.id && n.kind === 'comment',
+      ),
+    );
+    const pair = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      ['deriveBits'],
+    );
+    const sub = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/test-only',
+      keys: {
+        p256dh: Buffer.from(
+          await crypto.subtle.exportKey('raw', pair.publicKey),
+        ).toString('base64url'),
+        auth: Buffer.alloc(16, 1).toString('base64url'),
+      },
+    };
+    assert.equal(
+      (await post('notifications/subscribe', sub, spoof)).status,
+      503,
+    );
+    const v = await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    );
+    const vj = await crypto.subtle.exportKey('jwk', v.privateKey);
+    env.VAPID_PRIVATE_KEY = vj.d;
+    env.VAPID_PUBLIC_KEY = Buffer.from(
+      await crypto.subtle.exportKey('raw', v.publicKey),
+    ).toString('base64url');
+    assert.equal(
+      (
+        await post(
+          'notifications/subscribe',
+          { ...sub, endpoint: 'https://localhost/private' },
+          spoof,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (await post('notifications/subscribe', sub, spoof)).status,
+      200,
+    );
+    const diagnostic = await post(
+      'notifications/test',
+      { endpoint: sub.endpoint },
+      spoof,
+    );
+    assert.equal(diagnostic.status, 201);
+    assert.equal(
+      (await post('notifications/test', { endpoint: sub.endpoint }, spoof))
+        .status,
+      429,
+    );
+    assert.equal(
+      (
+        await call('/api/notifications/test-status?id=' + diagnostic.data.id, {
+          cookie: admin,
+        })
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await call('/api/notifications/test-status?id=' + diagnostic.data.id, {
+          cookie: spoof,
+        })
+      ).data.attempts,
+      0,
+    );
+    // Remove membership: neither inbox nor delivery may reveal the private task.
+    await post('admin/membership', {
+      user_id: memberId,
+      workspace_id: finance,
+      role: 'remove',
+    });
+    assert.ok(
+      !(
+        await call('/api/notifications', { cookie: spoof })
+      ).data.notifications.some((n) => n.task_id === noticeTask.data.id),
+    );
+    const beforePush = pushCalls;
+    await deliverNotifications(env);
+    assert.equal(
+      sqlite
+        .prepare(
+          'SELECT count(*) n FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id WHERE n.task_id=? AND d.sent=1',
+        )
+        .get(noticeTask.data.id).n,
+      0,
+    );
+    await post('admin/membership', {
+      user_id: memberId,
+      workspace_id: finance,
+      role: 'coordinator',
+    });
+    // Ensure eligibility by timestamp, independent of test execution speed.
+    sqlite
+      .prepare(
+        "UPDATE push_subscriptions SET created_at=datetime('now','-1 hour')",
+      )
+      .run();
+    await deliverNotifications(env);
+    assert.ok(pushCalls > beforePush);
+    const afterPush = pushCalls;
+    await deliverNotifications(env);
+    assert.equal(pushCalls, afterPush, 'Delivered pushes are not repeated');
+    await post('notifications/read', { id: notice.id }, spoof);
+    assert.ok(
+      sqlite
+        .prepare('SELECT read_at FROM notifications WHERE id=?')
+        .get(notice.id).read_at,
+    );
+    assert.ok(
+      !(
+        await call('/api/notifications', { cookie: spoof })
+      ).data.notifications.some((n) => n.id === notice.id),
+      'Read notices disappear from inbox',
+    );
+    assert.equal(
+      (await call('/api/notifications/item?id=' + notice.id, { cookie: spoof }))
+        .data.task_id,
+      noticeTask.data.id,
+      'Old browser notification still resolves its target',
+    );
+    assert.equal(
+      (await call('/api/notifications/item?id=' + notice.id, { cookie: admin }))
+        .status,
+      404,
+      'Administrator cannot open another person notification',
+    );
+    await post(
+      'tasks/' + noticeTask.data.id + '/comments',
+      { body: 'Teste de nova tentativa' },
+      admin,
+      finance,
+    );
+    pushStatus = 503;
+    await deliverNotifications(env);
+    assert.equal(
+      sqlite
+        .prepare(
+          'SELECT last_error FROM notification_deliveries WHERE sent=0 AND attempts>0 LIMIT 1',
+        )
+        .get().last_error,
+      'provider_http_503:Error',
+    );
+    const failedCalls = pushCalls;
+    await deliverNotifications(env);
+    assert.equal(pushCalls, failedCalls, 'Respect retry backoff');
+    sqlite
+      .prepare('UPDATE notification_deliveries SET next_attempt=0 WHERE sent=0')
+      .run();
+    pushStatus = 410;
+    await deliverNotifications(env);
+    pushStatus = 201;
+    assert.equal(
+      sqlite.prepare('SELECT count(*) n FROM push_subscriptions').get().n,
+      0,
+      'Expired subscriptions removed',
+    );
+    await post('notifications/subscribe', sub, spoof);
+    await post('notifications/unsubscribe', { endpoint: sub.endpoint }, spoof);
+    assert.equal(
+      sqlite.prepare('SELECT count(*) n FROM push_subscriptions').get().n,
+      0,
+    );
+    delete env.VAPID_PUBLIC_KEY;
+    delete env.VAPID_PRIVATE_KEY;
+    sqlite
+      .prepare('DELETE FROM events WHERE task_id=?')
+      .run(noticeTask.data.id);
+    sqlite
+      .prepare('DELETE FROM comments WHERE task_id=?')
+      .run(noticeTask.data.id);
+    sqlite
+      .prepare('DELETE FROM task_weeks WHERE task_id=?')
+      .run(noticeTask.data.id);
+    sqlite.prepare('DELETE FROM tasks WHERE id=?').run(noticeTask.data.id);
+  }
+  {
+    for (const title of [
+      'Tarefa Financeiro',
+      '  TAREFA   FINANCEIRO  ',
+      'Táréfa Financeiro',
+    ]) {
+      assert.equal(
+        (
+          await post(
+            'tasks',
+            { ...task, title, week: '2026-11-01' },
+            spoof,
+            finance,
+          )
+        ).status,
+        409,
+      );
+    }
+    // The unique index also rejects writes bypassing the preflight check.
+    assert.throws(
+      () =>
+        sqlite
+          .prepare(
+            "INSERT INTO tasks(id,title,title_key,assignee_id,created_by,week,workspace_id,priority) VALUES('race-test','Tarefa Financeiro','tarefa financeiro',?,?,?,?,'normal')",
+          )
+          .run(memberId, memberId, '2026-11-01', finance),
+      /UNIQUE/,
+    );
+    const other = await post(
+      'tasks',
+      { ...task, title: 'Nome exclusivo para edição' },
+      spoof,
+      finance,
+    );
+    assert.equal(other.status, 201);
+    assert.equal(
+      (
+        await post(
+          'imports/commit',
+          {
+            week: task.week,
+            importId: crypto.randomUUID(),
+            tasks: [
+              {
+                ...task,
+                title: 'TÁREFA FINANCEIRO',
+                responsible_name: '',
+                status: 'progress',
+                block_reason: '',
+                checklist: [],
+              },
+            ],
+          },
+          spoof,
+          finance,
+        )
+      ).status,
+      409,
+    );
+    const preview = await post(
+      'imports/preview',
+      {
+        week: '2026-11-01',
+        text: `👤 ${me.data.user.name}\n- Tarefa Financeiro\n- Nova tarefa única\n- NOVA TAREFA ÚNICA`,
+      },
+      spoof,
+      finance,
+    );
+    assert.equal(preview.status, 200);
+    assert.deepEqual(preview.data.duplicates, [0, 2]);
+    assert.equal(
+      (
+        await call('/api/tasks/' + other.data.id, {
+          method: 'PATCH',
+          cookie: spoof,
+          workspace: finance,
+          body: { details: { ...task, title: 'Tarefa Financeiro' } },
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      sqlite.prepare('SELECT title FROM tasks WHERE id=?').get(other.data.id)
+        .title,
+      'Nome exclusivo para edição',
+    );
+    sqlite.prepare('DELETE FROM events WHERE task_id=?').run(other.data.id);
+    sqlite.prepare('DELETE FROM task_weeks WHERE task_id=?').run(other.data.id);
+    sqlite.prepare('DELETE FROM tasks WHERE id=?').run(other.data.id);
+  }
   assert.equal(
     (
       await call('/api/tasks?week=2026-10-25', {

@@ -1,5 +1,13 @@
 import { deleteProfileRoute } from './delete-profile';
-import { getAccount, reply, type AuthEnv, type Account } from './auth';
+import {
+  getAccount,
+  reply,
+  ADMIN_OBJECT,
+  ADMIN_TENANT,
+  type AuthEnv,
+  type Account,
+} from './auth';
+import { sectorAdminRoute } from './sector-admin';
 const text = (v: unknown, max = 120): v is string =>
   typeof v === 'string' && !!v.trim() && v.length <= max;
 export async function adminRoute(
@@ -10,21 +18,30 @@ export async function adminRoute(
   if (!path.startsWith('/api/admin/')) return null;
   const actor = await getAccount(r, env);
   if (!actor) return reply({ error: 'Entre com a Microsoft.' }, 401);
-  if (!actor.is_admin || actor.access_status !== 'active')
+  if (
+    actor.access_status !== 'active' ||
+    (!actor.is_admin && actor.onboarding_required)
+  )
     return reply(
       { error: 'Somente o administrador pode gerenciar setores e acessos.' },
       403,
     );
+  const scoped = await sectorAdminRoute(r, env, actor);
+  if (scoped) return scoped;
   if (path === '/api/admin/profile-deletion')
     return deleteProfileRoute(r, env, actor);
   if (path === '/api/admin/state' && r.method === 'GET') {
     const [users, workspaces, memberships, audit, requests] = await Promise.all(
       [
         env.DB.prepare(
-          `SELECT u.id,u.name,u.job,u.color,u.access_status,u.is_admin,u.onboarding_required,u.registration_email,i.email,i.tenant_id,i.object_id,i.display_name FROM users u LEFT JOIN corporate_identities i ON i.user_id=u.id WHERE u.access_status!='merged' ORDER BY u.name`,
-        ).all(),
+          `SELECT u.id,u.name,u.job,u.color,u.microsoft_photo,u.access_status,u.is_admin,u.onboarding_required,u.registration_email,i.email,i.tenant_id,i.object_id,i.display_name,(i.tenant_id=? AND i.object_id=?) AS protected_admin FROM users u LEFT JOIN corporate_identities i ON i.user_id=u.id WHERE u.access_status!='merged' ORDER BY u.name`,
+        )
+          .bind(ADMIN_TENANT, ADMIN_OBJECT)
+          .all(),
         env.DB.prepare('SELECT * FROM workspaces ORDER BY name').all(),
-        env.DB.prepare('SELECT * FROM workspace_memberships').all(),
+        env.DB.prepare(
+          'SELECT m.*,p.job AS sector_job FROM workspace_memberships m LEFT JOIN workspace_member_profiles p ON p.user_id=m.user_id AND p.workspace_id=m.workspace_id',
+        ).all(),
         env.DB.prepare(
           'SELECT a.*,u.name FROM admin_audit a JOIN users u ON u.id=a.actor_id ORDER BY a.rowid DESC LIMIT 50',
         ).all(),
@@ -34,6 +51,7 @@ export async function adminRoute(
       ],
     );
     return reply({
+      scope: 'global',
       requests: requests.results,
       users: users.results,
       workspaces: workspaces.results,
@@ -51,7 +69,48 @@ export async function adminRoute(
   const statements: D1PreparedStatement[] = [];
   let action = '',
     details = '';
-  if (path === '/api/admin/review') {
+  if (path === '/api/admin/administrator') {
+    if (
+      !text(b.user_id) ||
+      typeof b.is_admin !== 'boolean' ||
+      b.confirm !== true
+    )
+      return reply({ error: 'Confirme a alteração de administrador.' }, 400);
+    const result = await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE users SET is_admin=? WHERE id=? AND access_status='active' AND onboarding_required=0
+        AND EXISTS(SELECT 1 FROM corporate_identities WHERE user_id=users.id)
+        AND EXISTS(SELECT 1 FROM users a WHERE a.id=? AND a.is_admin=1 AND a.access_status='active')
+        AND (?=1 OR (id!=? AND NOT EXISTS(SELECT 1 FROM corporate_identities i WHERE i.user_id=users.id AND i.tenant_id=? AND i.object_id=?)
+          AND EXISTS(SELECT 1 FROM users other WHERE other.id!=users.id AND other.is_admin=1 AND other.access_status='active')))`,
+      ).bind(
+        b.is_admin ? 1 : 0,
+        b.user_id,
+        actor.id,
+        b.is_admin ? 1 : 0,
+        actor.id,
+        ADMIN_TENANT,
+        ADMIN_OBJECT,
+      ),
+      env.DB.prepare(
+        'INSERT INTO admin_audit(id,actor_id,action,details) SELECT ?,?,?,? WHERE changes()>0',
+      ).bind(
+        crypto.randomUUID(),
+        actor.id,
+        'administrator',
+        JSON.stringify({ user_id: b.user_id, is_admin: b.is_admin }),
+      ),
+    ]);
+    return result[0].meta.changes
+      ? reply({ ok: true })
+      : reply(
+          {
+            error:
+              'Não foi possível alterar. Use uma conta aprovada e preserve seu próprio acesso e o administrador principal.',
+          },
+          409,
+        );
+  } else if (path === '/api/admin/review') {
     if (
       !text(b.user_id) ||
       !['approve', 'reject'].includes(String(b.decision)) ||
@@ -131,6 +190,24 @@ export async function adminRoute(
           role: b.decision === 'approve' ? b.role : null,
           note: b.note.trim(),
         }),
+        b.user_id,
+        decision,
+      ),
+    );
+    review.push(
+      env.DB.prepare(
+        'INSERT INTO notifications(id,user_id,kind,title,body) SELECT ?,?,?,?,? WHERE ' +
+          guard,
+      ).bind(
+        crypto.randomUUID(),
+        b.user_id,
+        'access_review',
+        b.decision === 'approve'
+          ? 'Cadastro aprovado'
+          : 'Correção de cadastro solicitada',
+        b.decision === 'approve'
+          ? 'Seu acesso ao Forest Flow foi aprovado.'
+          : 'Abra seu cadastro para conferir a orientação do administrador.',
         b.user_id,
         decision,
       ),
@@ -247,7 +324,11 @@ export async function adminRoute(
           ).bind(b.workspace_id, b.user_id, b.role),
     );
     action = 'membership';
-    details = JSON.stringify(b);
+    details = JSON.stringify({
+      user_id: b.user_id,
+      workspace_id: b.workspace_id,
+      role: b.role,
+    });
   } else if (path === '/api/admin/link') {
     if (
       !text(b.source_id) ||
@@ -315,11 +396,12 @@ export async function adminRoute(
         'UPDATE corporate_sessions SET user_id=? WHERE user_id=?',
       ).bind(b.target_id, b.source_id),
       env.DB.prepare(
-        'UPDATE users SET access_status=?,is_admin=?,onboarding_required=? WHERE id=?',
+        'UPDATE users SET access_status=?,is_admin=?,onboarding_required=?,microsoft_photo=? WHERE id=?',
       ).bind(
         source.access_status,
         source.is_admin,
         source.onboarding_required,
+        source.microsoft_photo || null,
         b.target_id,
       ),
       env.DB.prepare(

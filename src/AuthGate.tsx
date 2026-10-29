@@ -1,5 +1,8 @@
+import type { BoardView } from './admin-model';
+import { NotificationCenter } from './NotificationCenter';
+import { useAutoRefresh } from './useAutoRefresh';
 import { OnboardingForm, type AccessRequest } from './OnboardingForm';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from './types';
 import { Brand } from './Brand';
 import { AdminPanel } from './AdminPanel';
@@ -48,21 +51,33 @@ export function AuthGate({
     user: CorporateUser,
     logout: () => Promise<void>,
     workspace: Workspace,
+    initialView: BoardView,
+    openAdministration: (() => void) | undefined,
+    pendingRequests: number,
   ) => React.ReactNode;
 }) {
   const [session, setSession] = useState<Session>({}),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
-    [selected, setSelected] = useState(''),
-    [admin, setAdmin] = useState(false),
-    // Voltando da Microsoft: a luminária já entra acesa enquanto carrega.
+    [selected, setSelected] = useState(
+      () => new URLSearchParams(location.search).get('workspace') || '',
+    ),
+    [admin, setAdmin] = useState(
+      () =>
+        new URLSearchParams(location.search).get('administration') ===
+        'requests',
+    ),
+    [boardView, setBoardView] = useState<BoardView>('team'),
     [returning] = useState(
       () => new URLSearchParams(location.search).get('login') === 'success',
     );
+  const sessionVersion = useRef(0);
   async function load() {
+    const version = ++sessionVersion.current;
     const r = await fetch('/api/auth/me');
     const data = (await r.json()) as Session;
+    if (version !== sessionVersion.current) return;
     if (r.ok) {
       setSession(data);
       setSelected((id) =>
@@ -74,6 +89,7 @@ export function AuthGate({
     else throw new Error(data.error || 'Falha ao carregar seu acesso.');
   }
   async function logout() {
+    ++sessionVersion.current;
     await fetch('/api/auth/logout', { method: 'POST' });
     markTab(false);
     setSession({});
@@ -83,6 +99,9 @@ export function AuthGate({
   }
   useEffect(() => {
     const query = new URLSearchParams(location.search);
+    const notification = query.get('notification');
+    if (notification && notification.length <= 120)
+      sessionStorage.setItem('forest-notification-open', notification);
     if (query.get('login') === 'failed') {
       const messages: Record<string, string> = {
         session:
@@ -121,6 +140,7 @@ export function AuthGate({
         .finally(() => setLoading(false));
     else setLoading(false);
     const expired = () => {
+      ++sessionVersion.current;
       markTab(false);
       setSession({});
       setNotice('Sua sessão foi encerrada. Entre novamente.');
@@ -144,17 +164,12 @@ export function AuthGate({
         );
       }
     }, 15000);
-    // Refresh permissions even when a workspace is open: revoked access must leave the screen.
-    const permissions = setInterval(
-      () => void load().catch(() => undefined),
-      60000,
-    );
     return () => {
       clearInterval(timer);
-      clearInterval(permissions);
       events.forEach((e) => removeEventListener(e, touch));
     };
   }, [session.authenticated]);
+  useAutoRefresh(load, !!session.authenticated);
   const lamp = (
     <div className="lamp" aria-hidden="true">
       <i className="lamp-cord" />
@@ -174,19 +189,45 @@ export function AuthGate({
     );
   const user = session.user,
     workspace = session.workspaces?.find((w) => w.id === selected);
+  const canAdminister =
+    !!user?.is_admin ||
+    !!session.workspaces?.some((w) => w.role === 'coordinator');
   if (user && user.access_status === 'pending' && !user.is_admin)
     return (
-      <OnboardingForm
-        key={user.id}
-        user={user}
-        request={session.onboarding || null}
-        onChange={load}
-        logout={logout}
-      />
+      <>
+        <NotificationCenter key={user.id} userId={user.id} active={false} />
+        <OnboardingForm
+          key={user.id}
+          user={user}
+          request={session.onboarding || null}
+          onChange={load}
+          logout={logout}
+        />
+      </>
+    );
+  if (user && user.access_status === 'active' && canAdminister && admin)
+    return (
+      <>
+        <NotificationCenter key={user.id} userId={user.id} active />
+        <AdminPanel
+          key={`${user.id}:${user.is_admin}:${session.workspaces?.map((w) => w.id + ':' + w.role).join(',')}`}
+          user={user}
+          workspaces={session.workspaces || []}
+          currentWorkspace={workspace}
+          onWorkspaceChange={setSelected}
+          onExit={(view) => {
+            setBoardView(view);
+            setAdmin(false);
+          }}
+          onLogout={logout}
+          onChange={load}
+        />
+      </>
     );
   if (user && user.access_status === 'active')
     return (
       <>
+        <NotificationCenter key={user.id} userId={user.id} active />
         <div className="corporate-bar">
           <span>
             <strong>{user.name}</strong> · {user.email}
@@ -218,22 +259,19 @@ export function AuthGate({
                 ? 'Coordenador'
                 : 'Membro'}
           </span>
-          {user.is_admin === 1 && (
-            <button className="secondary" onClick={() => setAdmin(!admin)}>
-              {admin ? 'Voltar ao quadro' : 'Administração'}
-              {!admin &&
-                !!session.pendingRequests &&
-                ` (${session.pendingRequests})`}
-            </button>
-          )}
           <button className="secondary" onClick={() => void logout()}>
             Sair
           </button>
         </div>
-        {admin && user.is_admin === 1 ? (
-          <AdminPanel onChange={load} />
-        ) : workspace ? (
-          children({ ...user, role: workspace.role }, logout, workspace)
+        {workspace ? (
+          children(
+            { ...user, role: workspace.role },
+            logout,
+            workspace,
+            boardView,
+            canAdminister ? () => setAdmin(true) : undefined,
+            session.pendingRequests || 0,
+          )
         ) : (
           <div className="auth-shell">
             <div className="auth-card">

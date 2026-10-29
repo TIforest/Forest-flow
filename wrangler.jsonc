@@ -3,6 +3,7 @@
   "name": "forest-flow",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-26",
+  "triggers": { "crons": ["* * * * *"] },
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",

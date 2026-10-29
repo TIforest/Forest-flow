@@ -5,6 +5,7 @@ export type User = {
   role: 'coordinator' | 'member';
   job: string;
   color: string;
+  microsoft_photo?: string | null;
   registration_email?: string | null;
 };
 export type Status = 'progress' | 'blocked' | 'done';

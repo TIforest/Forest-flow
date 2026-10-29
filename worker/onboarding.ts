@@ -37,12 +37,12 @@ export async function onboardingRoute(
       { error: 'Preencha nome, cargo e setor. Confira os limites dos campos.' },
       400,
     );
-  const result = await env.DB.prepare(
-    `INSERT INTO access_requests(user_id,name,job,department,unit,notes)
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO access_requests(user_id,name,job,department,unit,notes)
  SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND access_status='pending' AND is_admin=0)
  ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,job=excluded.job,department=excluded.department,unit=excluded.unit,notes=excluded.notes,status='submitted',submitted_at=CURRENT_TIMESTAMP,reviewed_at=NULL,reviewed_by=NULL,review_note='',decision_id=NULL WHERE access_requests.status='rejected'`,
-  )
-    .bind(
+    ).bind(
       user.id,
       b.name.trim(),
       b.job.trim(),
@@ -50,8 +50,13 @@ export async function onboardingRoute(
       String(b.unit ?? '').trim(),
       String(b.notes ?? '').trim(),
       user.id,
-    )
-    .run();
+    ),
+    env.DB.prepare(
+      `INSERT INTO notifications(id,user_id,kind,title,body)
+      SELECT lower(hex(randomblob(16))),id,'access_request','Nova solicitação de entrada',? FROM users WHERE is_admin=1 AND access_status='active' AND changes()>0`,
+    ).bind(b.name.trim() + ' enviou um cadastro para análise.'),
+  ]);
+  const result = results[0];
   if (!result.meta.changes)
     return reply(
       {

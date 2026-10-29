@@ -1,4 +1,5 @@
 import * as oauth from 'oauth4webapi';
+import { syncMicrosoftPhoto } from './microsoft-photo';
 import type { User } from '../src/types';
 export interface AuthEnv {
   DB: D1Database;
@@ -7,6 +8,8 @@ export interface AuthEnv {
   ENTRA_CLIENT_SECRET?: string;
   ENTRA_REDIRECT_URI?: string;
   ALLOWED_EMAIL_DOMAIN?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
 }
 export type Account = User & {
   is_admin: number;
@@ -155,6 +158,9 @@ export async function authRoute(
     });
   }
   if (path === '/api/auth/logout' && r.method === 'POST') {
+    await env.DB.prepare('DELETE FROM push_subscriptions WHERE session_hash=?')
+      .bind(await digest(value(r, 'forest_corporate')))
+      .run();
     await env.DB.prepare('DELETE FROM corporate_sessions WHERE token_hash=?')
       .bind(await digest(value(r, 'forest_corporate')))
       .run();
@@ -384,6 +390,7 @@ export async function authRoute(
     )
       .bind(email, profile.displayName || email, identity.user_id)
       .run();
+    await syncMicrosoftPhoto(env, identity.user_id, tokens.access_token);
     stage = 'session';
     const raw = random(),
       now = Date.now();

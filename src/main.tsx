@@ -1,3 +1,7 @@
+import type { BoardView } from './admin-model';
+import { AvatarPhoto } from './AvatarPhoto';
+import { useAutoRefresh } from './useAutoRefresh';
+import { deadlineAlert } from './deadlines';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -18,6 +22,7 @@ import {
   Inbox,
   ArrowLeftRight,
   LogOut,
+  Settings2,
 } from 'lucide-react';
 import {
   DELETED_USER_ID,
@@ -88,17 +93,31 @@ function App({
   signedIn,
   logout,
   workspace,
+  initialView,
+  openAdministration,
+  pendingRequests,
 }: {
   signedIn: CorporateUser;
   logout: () => Promise<void>;
   workspace: Workspace;
+  initialView: BoardView;
+  openAdministration?: () => void;
+  pendingRequests: number;
 }) {
   const identity = signedIn.id;
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [previous, setPrevious] = useState<Task[]>([]);
-  const [week, setWeek] = useState(sunday());
-  const [view, setView] = useState('team');
+  const [week, setWeek] = useState(() => {
+    const value = new URLSearchParams(location.search).get('week');
+    return value &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      Number.isFinite(Date.parse(value + 'T12:00:00')) &&
+      sunday(new Date(value + 'T12:00:00')) === value
+      ? value
+      : sunday();
+  });
+  const [view, setView] = useState<string>(initialView);
   const [search, setSearch] = useState('');
   const [person, setPerson] = useState('');
   const [error, setError] = useState('');
@@ -117,8 +136,24 @@ function App({
   const suppressClick = useRef(false);
   const moving = useRef(false);
   const context = useRef('');
-  context.current = `${identity}:${week}`;
+  context.current = `${identity}:${workspace.id}:${week}`;
   const actor = signedIn;
+  const notificationOpened = useRef(false);
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get('task');
+    if (loading || !id || notificationOpened.current) return;
+    notificationOpened.current = true;
+    const task = tasks.find((t) => t.id === id);
+    if (task) setEditing(task);
+    else setError('A atividade não está mais disponível ou seu acesso mudou.');
+    const query = new URLSearchParams(location.search);
+    ['task', 'workspace', 'week'].forEach((key) => query.delete(key));
+    history.replaceState(
+      null,
+      '',
+      location.pathname + (query.size ? '?' + query : ''),
+    );
+  }, [loading, tasks]);
   const coordinator = actor?.role === 'coordinator';
   useAmbientPause();
   const colorFor = (id: string) =>
@@ -147,13 +182,22 @@ function App({
     return body as T;
   }
   async function refresh() {
+    const originalContext = context.current;
     const [current, last] = await Promise.all([
       api<Task[]>(`tasks?week=${week}`),
       api<Task[]>(`tasks?week=${shift(week, -7)}`),
     ]);
-    setTasks(current);
-    setPrevious(last);
+    if (context.current === originalContext) {
+      setTasks(current);
+      setPrevious(last);
+    }
   }
+  useAutoRefresh(async () => {
+    if (saving || moveBusy || draggedId) return;
+    const originalContext = context.current;
+    const [members] = await Promise.all([api<User[]>('users'), refresh()]);
+    if (context.current === originalContext) setUsers(members);
+  }, !loading);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -185,7 +229,7 @@ function App({
     return () => {
       active = false;
     };
-  }, [identity, week]);
+  }, [identity, workspace.id, week]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(''), 4000);
@@ -313,9 +357,10 @@ function App({
   }, []);
   function card(task: Task, index = 0) {
     const movable = view !== 'meeting' && canMove(task);
+    const deadline = deadlineAlert(task.due_date, task.status);
     return (
       <button
-        className={`task ${movable ? 'can-move' : ''} ${draggedId === task.id ? 'is-dragging' : ''}`}
+        className={`task ${deadline ? `deadline-${deadline.kind}` : ''} ${movable ? 'can-move' : ''} ${draggedId === task.id ? 'is-dragging' : ''}`}
         aria-label={`${task.title}${movable ? '. Para mover pelo teclado, pressione espaço, escolha a coluna com as setas e confirme com Enter.' : ''}`}
         onPointerDown={(e) => {
           if (!movable || e.button !== 0 || e.pointerType === 'touch') return;
@@ -435,6 +480,11 @@ function App({
           <ArrowUpRight size={15} />
         </div>
         <h3>{task.title}</h3>
+        {deadline && (
+          <div className={`deadline-alert ${deadline.kind}`}>
+            <CircleAlert size={15} aria-hidden="true" /> {deadline.text}
+          </div>
+        )}
         {task.description && <p>{task.description}</p>}
         {task.status === 'blocked' && (
           <div className="block-note">{task.block_reason}</div>
@@ -443,7 +493,10 @@ function App({
           <span className="person">
             {task.assignee_ids.map((id) => (
               <span className="avatar small" key={id} style={colorFor(id)}>
-                {name(id).slice(0, 1)}
+                <AvatarPhoto
+                  user={users.find((u) => u.id === id)}
+                  fallback={name(id).slice(0, 1)}
+                />
               </span>
             ))}
             {task.assignee_ids.map((id) => name(id).split(' ·')[0]).join(', ')}
@@ -503,15 +556,37 @@ function App({
               )}
             </button>
           ))}
+          {openAdministration && (
+            <button
+              className="sidebar-administration"
+              onClick={openAdministration}
+            >
+              <Settings2 size={19} />
+              Administração
+              {pendingRequests > 0 && (
+                <span
+                  className="nav-count"
+                  aria-label={`${pendingRequests} solicitações pendentes`}
+                >
+                  {pendingRequests}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
         <div className="profile">
           <span className="avatar member-avatar" style={colorFor(identity)}>
-            {actor?.name.slice(0, 1) || 'C'}
+            <AvatarPhoto
+              user={actor}
+              fallback={actor?.name.slice(0, 1) || 'C'}
+            />
           </span>
           <div>
             <strong>{actor?.name || 'Carregando…'}</strong>
             <small>
-              {actor?.role === 'coordinator' ? 'Coordenador' : 'Membro'}
+              {users.find((u) => u.id === identity)?.job ||
+                actor.job ||
+                'Cargo não informado'}
             </small>
           </div>
           <div className="profile-actions">
@@ -681,7 +756,9 @@ function App({
                     {users.map((u) => (
                       <div className="member-group" key={u.id}>
                         <div className="member-title" style={colorFor(u.id)}>
-                          <span className="avatar small">{u.name[0]}</span>
+                          <span className="avatar small">
+                            <AvatarPhoto user={u} fallback={u.name[0]} />
+                          </span>
                           <strong>{u.name}</strong>
                           <span>
                             {
@@ -1398,12 +1475,22 @@ function TaskPanel({
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthGate>
-      {(user, logout, workspace) => (
+      {(
+        user,
+        logout,
+        workspace,
+        initialView,
+        openAdministration,
+        pendingRequests,
+      ) => (
         <App
           key={user.id + workspace.id + workspace.role}
           signedIn={user}
           logout={logout}
           workspace={workspace}
+          initialView={initialView}
+          openAdministration={openAdministration}
+          pendingRequests={pendingRequests}
         />
       )}
     </AuthGate>

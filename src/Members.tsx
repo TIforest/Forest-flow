@@ -234,7 +234,10 @@ export function Members({
               className="member-record-avatar"
               style={{ background: user.color }}
             >
-              {user.name.slice(0, 1).toUpperCase()}
+              <AvatarPhoto
+                user={user}
+                fallback={user.name.slice(0, 1).toUpperCase()}
+              />
             </span>
             <div className="member-record-info">
               <h3>
@@ -269,3 +272,4 @@ export function Members({
     </section>
   );
 }
+import { AvatarPhoto } from './AvatarPhoto';
