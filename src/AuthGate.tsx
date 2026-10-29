@@ -54,6 +54,8 @@ export function AuthGate({
     initialView: BoardView,
     openAdministration: (() => void) | undefined,
     pendingRequests: number,
+    workspaces: Workspace[],
+    selectWorkspace: (id: string) => void,
   ) => React.ReactNode;
 }) {
   const [session, setSession] = useState<Session>({}),
@@ -228,41 +230,8 @@ export function AuthGate({
     return (
       <>
         <NotificationCenter key={user.id} userId={user.id} active />
-        <div className="corporate-bar">
-          <span>
-            <strong>{user.name}</strong> · {user.email}
-          </span>
-          <label>
-            Setor{' '}
-            <select
-              aria-label="Espaço de trabalho"
-              value={selected}
-              onChange={(e) => {
-                setSelected(e.target.value);
-                setAdmin(false);
-              }}
-            >
-              <option value="" disabled>
-                Sem setor definido
-              </option>
-              {session.workspaces?.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span>
-            {user.is_admin
-              ? 'Administrador'
-              : workspace?.role === 'coordinator'
-                ? 'Coordenador'
-                : 'Membro'}
-          </span>
-          <button className="secondary" onClick={() => void logout()}>
-            Sair
-          </button>
-        </div>
+        {/* Sem barra no topo: o setor é escolhido no cartão do menu lateral
+            e o único "Sair" fica no canto inferior esquerdo. */}
         {workspace ? (
           children(
             { ...user, role: workspace.role },
@@ -271,6 +240,11 @@ export function AuthGate({
             boardView,
             canAdminister ? () => setAdmin(true) : undefined,
             session.pendingRequests || 0,
+            session.workspaces || [],
+            (id) => {
+              setSelected(id);
+              setAdmin(false);
+            },
           )
         ) : (
           <div className="auth-shell">
@@ -285,6 +259,9 @@ export function AuthGate({
                   Gerenciar setores
                 </button>
               )}
+              <button className="auth-link" onClick={() => void logout()}>
+                Sair
+              </button>
             </div>
           </div>
         )}

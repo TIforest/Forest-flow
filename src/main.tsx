@@ -96,6 +96,8 @@ function App({
   initialView,
   openAdministration,
   pendingRequests,
+  workspaces,
+  selectWorkspace,
 }: {
   signedIn: CorporateUser;
   logout: () => Promise<void>;
@@ -103,6 +105,8 @@ function App({
   initialView: BoardView;
   openAdministration?: () => void;
   pendingRequests: number;
+  workspaces: Workspace[];
+  selectWorkspace: (id: string) => void;
 }) {
   const identity = signedIn.id;
   const [users, setUsers] = useState<User[]>([]);
@@ -530,8 +534,25 @@ function App({
             {workspace.name.slice(0, 2).toUpperCase()}
           </span>
           <div>
-            <strong>{workspace.name}</strong>
-            <small>Espaço de trabalho</small>
+            {workspaces.length > 1 ? (
+              <label className="workspace-select">
+                <span className="sr-only">Setor</span>
+                <select
+                  aria-label="Setor"
+                  value={workspace.id}
+                  onChange={(e) => selectWorkspace(e.target.value)}
+                >
+                  {workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <strong>{workspace.name}</strong>
+            )}
+            <small>Setor</small>
           </div>
         </div>
         <nav
@@ -1482,6 +1503,8 @@ createRoot(document.getElementById('root')!).render(
         initialView,
         openAdministration,
         pendingRequests,
+        workspaces,
+        selectWorkspace,
       ) => (
         <App
           key={user.id + workspace.id + workspace.role}
@@ -1491,6 +1514,8 @@ createRoot(document.getElementById('root')!).render(
           initialView={initialView}
           openAdministration={openAdministration}
           pendingRequests={pendingRequests}
+          workspaces={workspaces}
+          selectWorkspace={selectWorkspace}
         />
       )}
     </AuthGate>
