@@ -18,6 +18,7 @@ import {
   Inbox,
   ArrowLeftRight,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   DELETED_USER_ID,
@@ -27,7 +28,7 @@ import {
   type Status,
 } from './types';
 import './styles.css';
-import type { Workspace, CorporateUser } from './AuthGate';
+import type { Workspace, CorporateUser, ShellControls } from './AuthGate';
 import { AuthGate } from './AuthGate';
 import { Continuity } from './Continuity';
 import { Comments } from './Comments';
@@ -88,10 +89,12 @@ function App({
   signedIn,
   logout,
   workspace,
+  shell,
 }: {
   signedIn: CorporateUser;
   logout: () => Promise<void>;
   workspace: Workspace;
+  shell: ShellControls;
 }) {
   const identity = signedIn.id;
   const [users, setUsers] = useState<User[]>([]);
@@ -477,8 +480,25 @@ function App({
             {workspace.name.slice(0, 2).toUpperCase()}
           </span>
           <div>
-            <strong>{workspace.name}</strong>
-            <small>Espaço de trabalho</small>
+            {shell.workspaces.length > 1 ? (
+              <label className="workspace-select">
+                <span className="sr-only">Setor</span>
+                <select
+                  aria-label="Setor"
+                  value={workspace.id}
+                  onChange={(e) => shell.selectWorkspace(e.target.value)}
+                >
+                  {shell.workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <strong>{workspace.name}</strong>
+            )}
+            <small>Setor</small>
           </div>
         </div>
         <nav
@@ -504,6 +524,19 @@ function App({
             </button>
           ))}
         </nav>
+        {shell.isAdmin && (
+          <button
+            type="button"
+            className="admin-link"
+            onClick={shell.openAdmin}
+          >
+            <ShieldCheck size={18} />
+            Administração
+            {shell.pendingRequests > 0 && (
+              <span className="nav-count">{shell.pendingRequests}</span>
+            )}
+          </button>
+        )}
         <div className="profile">
           <span className="avatar member-avatar" style={colorFor(identity)}>
             {actor?.name.slice(0, 1) || 'C'}
@@ -511,7 +544,11 @@ function App({
           <div>
             <strong>{actor?.name || 'Carregando…'}</strong>
             <small>
-              {actor?.role === 'coordinator' ? 'Coordenador' : 'Membro'}
+              {shell.isAdmin
+                ? 'Administrador'
+                : actor?.role === 'coordinator'
+                  ? 'Coordenador'
+                  : 'Membro'}
             </small>
           </div>
           <div className="profile-actions">
@@ -1398,12 +1435,13 @@ function TaskPanel({
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthGate>
-      {(user, logout, workspace) => (
+      {(user, logout, workspace, shell) => (
         <App
           key={user.id + workspace.id + workspace.role}
           signedIn={user}
           logout={logout}
           workspace={workspace}
+          shell={shell}
         />
       )}
     </AuthGate>

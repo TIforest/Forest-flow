@@ -41,6 +41,14 @@ function markTab(open: boolean) {
     /* sem armazenamento a sessão não é reaproveitada */
   }
 }
+// Controles da casca que antes ficavam na barra do topo; agora vão para a lateral.
+export type ShellControls = {
+  workspaces: Workspace[];
+  selectWorkspace: (id: string) => void;
+  isAdmin: boolean;
+  pendingRequests: number;
+  openAdmin: () => void;
+};
 export function AuthGate({
   children,
 }: {
@@ -48,6 +56,7 @@ export function AuthGate({
     user: CorporateUser,
     logout: () => Promise<void>,
     workspace: Workspace,
+    shell: ShellControls,
   ) => React.ReactNode;
 }) {
   const [session, setSession] = useState<Session>({}),
@@ -187,53 +196,21 @@ export function AuthGate({
   if (user && user.access_status === 'active')
     return (
       <>
-        <div className="corporate-bar">
-          <span>
-            <strong>{user.name}</strong> · {user.email}
-          </span>
-          <label>
-            Setor{' '}
-            <select
-              aria-label="Espaço de trabalho"
-              value={selected}
-              onChange={(e) => {
-                setSelected(e.target.value);
-                setAdmin(false);
-              }}
-            >
-              <option value="" disabled>
-                Sem setor definido
-              </option>
-              {session.workspaces?.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span>
-            {user.is_admin
-              ? 'Administrador'
-              : workspace?.role === 'coordinator'
-                ? 'Coordenador'
-                : 'Membro'}
-          </span>
-          {user.is_admin === 1 && (
-            <button className="secondary" onClick={() => setAdmin(!admin)}>
-              {admin ? 'Voltar ao quadro' : 'Administração'}
-              {!admin &&
-                !!session.pendingRequests &&
-                ` (${session.pendingRequests})`}
-            </button>
-          )}
-          <button className="secondary" onClick={() => void logout()}>
-            Sair
-          </button>
-        </div>
         {admin && user.is_admin === 1 ? (
-          <AdminPanel onChange={load} />
+          <div className="admin-shell">
+            <button className="secondary" onClick={() => setAdmin(false)}>
+              Voltar ao quadro
+            </button>
+            <AdminPanel onChange={load} />
+          </div>
         ) : workspace ? (
-          children({ ...user, role: workspace.role }, logout, workspace)
+          children({ ...user, role: workspace.role }, logout, workspace, {
+            workspaces: session.workspaces || [],
+            selectWorkspace: setSelected,
+            isAdmin: user.is_admin === 1,
+            pendingRequests: session.pendingRequests || 0,
+            openAdmin: () => setAdmin(true),
+          })
         ) : (
           <div className="auth-shell">
             <div className="auth-card">
@@ -247,6 +224,9 @@ export function AuthGate({
                   Gerenciar setores
                 </button>
               )}
+              <button className="auth-link" onClick={() => void logout()}>
+                Sair
+              </button>
             </div>
           </div>
         )}

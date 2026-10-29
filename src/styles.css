@@ -2896,3 +2896,72 @@ body.is-dragging-task * {
   opacity: 0.45;
   cursor: var(--cursor-arrow), default;
 }
+
+/* Setor e administração na lateral (substituem a barra corporativa do topo). */
+.workspace > div {
+  min-width: 0;
+  flex: 1;
+}
+.workspace-select select {
+  width: 100%;
+  border: 0;
+  padding: 0 18px 0 0;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a6bdb9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right center;
+  appearance: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+.workspace-select select:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.workspace-select option {
+  background: var(--ink-1);
+}
+.admin-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 42px;
+  padding: 0 12px 0 14px;
+  border-radius: var(--r-ctl);
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  transition:
+    color var(--t-fast),
+    background-color var(--t-fast);
+}
+.admin-link:hover {
+  color: var(--text);
+  background: var(--glass-strong);
+}
+.admin-link .nav-count {
+  background: var(--kraft-soft);
+  color: var(--kraft-bright);
+}
+.admin-shell {
+  position: relative;
+  z-index: 1;
+  padding: 24px 36px 0;
+}
+.admin-shell > .secondary {
+  margin-bottom: 16px;
+}
+@media (max-width: 920px) {
+  .admin-link {
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+  .workspace-select {
+    display: none;
+  }
+}
