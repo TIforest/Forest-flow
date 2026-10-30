@@ -18,7 +18,6 @@ import {
   ShieldCheck,
   Pencil,
   ChevronRight,
-  ChevronDown,
 } from 'lucide-react';
 import type { CorporateUser, Workspace } from './AuthGate';
 import { Brand } from './Brand';
@@ -227,6 +226,10 @@ export function AdminPanel({
   };
   return (
     <div className="admin-shell">
+      <div className="ambient" aria-hidden="true">
+        <i />
+        <i />
+      </div>
       <aside className="sidebar admin-sidebar">
         <a
           className="brand"
@@ -239,24 +242,35 @@ export function AdminPanel({
         >
           <Brand />
         </a>
-        <label className="admin-workspace-picker">
-          <span className="sr-only">Espaço de trabalho</span>
-          <select
-            aria-label="Espaço de trabalho"
-            value={currentWorkspace?.id || ''}
-            onChange={(e) => onWorkspaceChange(e.target.value)}
-          >
-            <option value="" disabled>
-              Selecione um setor
-            </option>
-            {workspaces.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown size={15} />
-        </label>
+        {/* Mesmo cartão de setor do quadro: o menu não muda de forma ao
+            entrar e sair da administração. */}
+        <div className="workspace">
+          <span className="workspace-icon">
+            {currentWorkspace
+              ? currentWorkspace.name.slice(0, 2).toUpperCase()
+              : '—'}
+          </span>
+          <div>
+            <label className="workspace-select">
+              <span className="sr-only">Setor</span>
+              <select
+                aria-label="Setor"
+                value={currentWorkspace?.id || ''}
+                onChange={(e) => onWorkspaceChange(e.target.value)}
+              >
+                <option value="" disabled>
+                  Selecione um setor
+                </option>
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <small>Setor</small>
+          </div>
+        </div>
         <nav aria-label="Seções">
           <button onClick={() => onExit('mine')}>
             <LayoutDashboard size={19} />
@@ -270,9 +284,8 @@ export function AdminPanel({
             <CalendarDays size={19} />
             Reunião semanal
           </button>
-          <span className="admin-nav-divider" />
           <button
-            className="active"
+            className="sidebar-administration active"
             aria-current="page"
             onClick={() => switchTab('users')}
           >
@@ -301,10 +314,12 @@ export function AdminPanel({
           </div>
           <div className="profile-actions">
             <button
+              type="button"
+              title="Sair"
               onClick={() => void onLogout().catch((e) => setError(e.message))}
             >
-              <LogOut size={14} />
-              Sair
+              <LogOut size={15} />
+              <span>Sair</span>
             </button>
           </div>
         </div>

@@ -2205,8 +2205,12 @@ body.is-dragging-task * {
   display: block;
   margin-top: 20px;
 }
+.auth-card > p + .primary {
+  margin-top: 20px;
+}
 .auth-link {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   margin-top: 14px;
   color: var(--text-2);
   font-size: 13px;
@@ -2983,10 +2987,33 @@ body.is-dragging-task * {
   margin-top: 28px;
   min-height: 44px;
 }
+/* Administração: separada das seções por um fio, com o mesmo destaque
+   (fundo lima suave + barrinha) das seções quando está aberta. */
 .sidebar nav .sidebar-administration {
-  margin-top: 18px;
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 8px 8px;
+  margin-top: 19px;
+}
+.sidebar nav .sidebar-administration::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -11px;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
+}
+.sidebar nav .sidebar-administration.active {
+  background: var(--lime-soft);
+}
+.sidebar nav .sidebar-administration.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--lime);
 }
 .microsoft-avatar-photo {
   width: 100%;
@@ -3083,4 +3110,24 @@ body.is-dragging-task * {
 }
 .notification-preferences .notification-disable:hover {
   color: var(--text);
+}
+/* Celular: o menu vira barra inferior. Administração entra como mais um
+   ícone, o perfil fica só com o "Sair" e o sino sobe para cima da barra. */
+@media (max-width: 640px) {
+  .sidebar nav .sidebar-administration {
+    margin-top: 0;
+  }
+  .sidebar nav .sidebar-administration::after,
+  .sidebar nav .sidebar-administration.active::before,
+  .sidebar nav .sidebar-administration .nav-count {
+    display: none;
+  }
+  .sidebar .profile > .avatar,
+  .sidebar .profile > .admin-avatar {
+    display: none;
+  }
+  .notification-bell {
+    right: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
 }

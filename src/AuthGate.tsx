@@ -247,8 +247,16 @@ export function AuthGate({
             },
           )
         ) : (
-          <div className="auth-shell">
+          <div className="auth-shell is-lit">
+            <div className="ambient" aria-hidden="true">
+              <i />
+              <i />
+            </div>
+            {lamp}
             <div className="auth-card">
+              <div className="brand">
+                <Brand />
+              </div>
               <h1>Sem setor definido</h1>
               <p>
                 Seu acesso está liberado, mas você ainda não participa de um
